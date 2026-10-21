@@ -706,6 +706,13 @@ function applyTexts(g, groups, x, baseY, lh) {
 const STEP_INNER = STEP_W - PAD * 2;
 const CHIP_INNER = CHIP_W - 38 - PAD;
 
+// 固定行数预留：进行中节点先占满行数，流式内容增长不再改变框高，画面不跳
+function padLines(lines, n) {
+  const out = lines.slice(0, n);
+  while (out.length < n) out.push("");
+  return out;
+}
+
 function stepGroups(step) {
   const running = !step.endedAt;
   const dur = step.endedAt ? step.endedAt - step.startedAt : Date.now() - step.startedAt;
@@ -714,12 +721,14 @@ function stepGroups(step) {
     : tr("生成中");
   const groups = [
     { cls: "t-title", lines: wrapText(`Step #${step.index} · ${step.agent ?? "?"}${step.model ? ` · ${step.model.id}` : ""}`, STEP_INNER, TITLE_FS, 1) },
-    { cls: "t-sub", lines: wrapText(`${fmtDur(dur)} · ${tok} · ${step.finish ?? (running ? tr("进行中") : "…")}`, STEP_INNER, SUB_FS, 2) },
+    { cls: "t-sub", lines: running ? padLines(wrapText(`${fmtDur(dur)} · ${tok} · ${step.finish ?? tr("进行中")}`, STEP_INNER, SUB_FS, 2), 2) : wrapText(`${fmtDur(dur)} · ${tok} · ${step.finish ?? "…"}`, STEP_INNER, SUB_FS, 2) },
   ];
   if (step.reasoning?.chars) {
     groups.push({
       cls: "t-sub",
-      lines: wrapText(`${tr("思考")} ${fmtTok(step.reasoning.chars)} ${tr("字")}${step.reasoning.preview ? `${sep()}${step.reasoning.preview}` : ""}`, STEP_INNER, SUB_FS, 2),
+      lines: running
+        ? padLines(wrapText(`${tr("思考")} ${fmtTok(step.reasoning.chars)} ${tr("字")}${step.reasoning.preview ? `${sep()}${step.reasoning.preview}` : ""}`, STEP_INNER, SUB_FS, 2), 2)
+        : wrapText(`${tr("思考")} ${fmtTok(step.reasoning.chars)} ${tr("字")}${step.reasoning.preview ? `${sep()}${step.reasoning.preview}` : ""}`, STEP_INNER, SUB_FS, 2),
     });
   }
   if (step.gpu) {
@@ -757,9 +766,15 @@ function chipGroups(tool) {
       : tool.status === "input"
         ? `${tr("等参数")} · ${tool.inputText || "…"}`
         : tool.inputText || "";
-  if (head) groups.push({ cls: "t-sub", lines: wrapText(head, CHIP_INNER, SUB_FS, 2) });
+  if (head) {
+    const lines = wrapText(head, CHIP_INNER, SUB_FS, 2);
+    groups.push({ cls: "t-sub", lines: tool.status === "running" || tool.status === "input" ? padLines(lines, 2) : lines });
+  }
   const tail = tool.status === "error" ? tool.error ?? "" : tool.metadata?.shellID ? tr("后台 shell 在跑") : tool.preview;
-  if (tail) groups.push({ cls: "t-sub", lines: wrapText(tail, CHIP_INNER, SUB_FS, 2) });
+  if (tail || tool.status === "running") {
+    const lines = wrapText(tail ?? "", CHIP_INNER, SUB_FS, 2);
+    groups.push({ cls: "t-sub", lines: tool.status === "running" ? padLines(lines, 2) : lines });
+  }
   let budget = 5;
   const out = [];
   for (const g of groups) {
@@ -830,10 +845,13 @@ function renderPipeline() {
         { cls: "t-title", lines: wrapText(tr("上下文压缩"), CHIP_INNER, TITLE_FS, 1) },
         {
           cls: "t-sub",
-          lines: wrapText(
-            `${s.compaction.status === "running" ? tr("压缩中") : tr("失败")} · ${fmtTok(s.compaction.chars)} ${lang === "zh" ? "字" : "chars"}`,
-            CHIP_INNER,
-            SUB_FS,
+          lines: padLines(
+            wrapText(
+              `${s.compaction.status === "running" ? tr("压缩中") : tr("失败")} · ${fmtTok(s.compaction.chars)} ${lang === "zh" ? "字" : "chars"}`,
+              CHIP_INNER,
+              SUB_FS,
+              2
+            ),
             2
           ),
         },
