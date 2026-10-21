@@ -144,10 +144,25 @@ const FIXTURE = {
           model: { id: "qwen-coder", providerID: "llamacpp" },
           reasoning: null,
           gpu: null,
-          tools: [],
+          tools: [
+            {
+              id: "c3",
+              name: "shell",
+              status: "running",
+              startedAt: now - 9000,
+              calledAt: now - 8800,
+              endedAt: null,
+              inputText: '{"command":"npm run build && node server.sh restart","workdir":"/home/feifei/develop/opencode/opencode-monitor","timeout":90000}',
+              metadata: null,
+              exit: null,
+              error: null,
+              preview: "",
+              lastProgressAt: now - 4000,
+            },
+          ],
         },
       ],
-      diagnosis: { level: "blocked", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"] },
+      diagnosis: { level: "blocked", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"], headlineEn: "Waiting for your approval", reasonsEn: ["edit: src/state.js, public/app.js — 改两个文件"] },
     },
     {
       id: "s2",
@@ -168,7 +183,7 @@ const FIXTURE = {
       retry: null,
       note: null,
       steps: [],
-      diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"] },
+      diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
     },
   ],
 };
@@ -186,9 +201,27 @@ console.log("fixture svg:", svg.getAttribute("width"), "x", svg.getAttribute("he
 console.log("steps stacked top-down:", stepRects.every((r, i) => i === 0 || r.y > stepRects[i - 1].y));
 console.log("chips on right column:", chipRects.every((r) => r.x === 334), "| chips:", chipRects.length);
 const lastStep = stepRects.at(-1);
+const chipRectsReal = [...svg.querySelectorAll("g.node")]
+  .filter((g) => (g.getAttribute("data-key") ?? "").startsWith("chip:"))
+  .map((g) => {
+    const r = g.querySelector("rect");
+    return { y: +r.getAttribute("y"), h: +r.getAttribute("height") };
+  })
+  .filter((r) => r.y >= lastStep.y);
 const svgH = +svg.getAttribute("height");
-const expectTop = Math.max(0, Math.min(lastStep.y + lastStep.h / 2 - 200, Math.max(0, svgH - 400)));
-console.log("当前 step 垂直居中:", fbox.scrollTop === expectTop, "| scrollTop:", fbox.scrollTop, "期望:", expectTop);
+const blockEnd = Math.max(lastStep.y + lastStep.h, ...chipRectsReal.map((r) => r.y + r.h));
+const blockH = blockEnd - lastStep.y;
+const base = blockH > 400 ? lastStep.y : lastStep.y + blockH / 2 - 200;
+const expectTop = Math.max(0, Math.min(base, Math.max(0, svgH - 400)));
+console.log("当前 step+工具块垂直居中:", fbox.scrollTop === expectTop, "| scrollTop:", fbox.scrollTop, "期望:", expectTop);
+console.log("工具块底在视野内:", blockEnd - fbox.scrollTop <= 400);
+// 块比视野还高时：贴顶对齐，保证块底不被框裁掉
+Object.defineProperty(fbox, "clientHeight", { value: 70, configurable: true });
+fx.feed(FIXTURE);
+const expectSmall = Math.max(0, Math.min(lastStep.y, Math.max(0, svgH - 70)));
+console.log("块放不下时贴顶对齐:", fbox.scrollTop === expectSmall, "| scrollTop:", fbox.scrollTop, "期望:", expectSmall);
+Object.defineProperty(fbox, "clientHeight", { value: 400, configurable: true });
+fx.feed(FIXTURE);
 
 // 溢出守卫：每行 tspan 的估算宽度必须落在节点矩形内
 const isWide = (ch) => /[\u2E80-\u9FFF\uFF01-\uFF60\u3000-\u303F\u{1F300}-\u{1F6FF}]/u.test(ch);
@@ -210,6 +243,13 @@ for (const g of svg.querySelectorAll("g.node")) {
 console.log("text overflow lines:", overflow);
 console.log("长文本被折行成多行:", svg.querySelectorAll("g.node text tspan").length > svg.querySelectorAll("g.node text").length);
 
+// 语言切换：默认英文，点按钮切中文，再切回英文
+console.log("默认英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("lang-toggle").textContent === "中文");
+fdoc.getElementById("lang-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("切换中文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "会话树" && fdoc.getElementById("lang-toggle").textContent === "EN" && fdoc.getElementById("diag-headline").textContent === "在等你批准权限");
+fdoc.getElementById("lang-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("切回英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("diag-headline").textContent === "Waiting for your approval");
+
 // 悬停详情 + 钉住
 const stepG = [...svg.querySelectorAll("g.node")].find((g) => (g.getAttribute("data-key") ?? "").startsWith("step:"));
 const chipG = [...svg.querySelectorAll("g.node")].find((g) => g.getAttribute("data-key") === "chip:c2");
@@ -217,10 +257,10 @@ const tip = fdoc.getElementById("tip");
 const mm = (x, y) => new fx.dom.window.MouseEvent("mousemove", { bubbles: true, clientX: x, clientY: y });
 stepG.dispatchEvent(mm(50, 50));
 console.log("step tip 可见:", !tip.classList.contains("hidden"));
-console.log("step tip 含 Step#/tokens/工具/GPU:", tip.innerHTML.includes("Step #1") && tip.innerHTML.includes("tokens") && tip.innerHTML.includes("工具") && tip.innerHTML.includes("GPU"));
+console.log("step tip 含 Step#/tokens/tools/GPU:", tip.innerHTML.includes("Step #1") && tip.innerHTML.includes("tokens") && tip.innerHTML.includes("tools") && tip.innerHTML.includes("GPU"));
 console.log("step tip 含思考全文:", tip.innerHTML.includes("刻意写长的思考文字"));
 chipG.dispatchEvent(mm(120, 80));
-console.log("chip tip 含状态/参数/错误行:", tip.innerHTML.includes("状态") && tip.innerHTML.includes("参数全文") && tip.innerHTML.includes("npm test"));
+console.log("chip tip 含 Status/Full parameters/输出行:", tip.innerHTML.includes("Status") && tip.innerHTML.includes("Full parameters") && tip.innerHTML.includes("npm test"));
 const card0 = tip.querySelector(".tip-card");
 const pre0 = tip.querySelector(".tip-pre");
 card0.scrollTop = 120;
@@ -262,7 +302,7 @@ console.log("离开浮层后关闭:", tip.classList.contains("hidden"));
 chipG.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true, clientX: 120, clientY: 80 }));
 console.log("tip pinned:", tip.classList.contains("pinned"));
 stepG.dispatchEvent(mm(50, 50));
-console.log("钉住后不被其它节点顶掉:", tip.classList.contains("pinned") && tip.innerHTML.includes("参数全文"));
+console.log("钉住后不被其它节点顶掉:", tip.classList.contains("pinned") && tip.innerHTML.includes("Full parameters"));
 fdoc.getElementById("pipeline").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true, clientX: 5, clientY: 5 }));
 console.log("空白处点击后关闭:", tip.classList.contains("hidden"));
 

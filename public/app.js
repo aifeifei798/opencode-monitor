@@ -17,6 +17,123 @@ const SUB_FS = 11.5;
 const LH = 17; // step 行高
 const LH_CH = 15; // 工具节点行高
 
+// 双语 UI：默认英文（localStorage 记住选择，头部按钮切换）。
+// 中文是唯一事实来源；en 模式下渲染时按整句精确匹配翻译成英文。
+const TE = {
+  // 静态标签（index.html data-i18n 的英文规范值经 TD 反向映射回中文）
+  "opencode 运行监控": "opencode live monitor",
+  "会话树": "Sessions",
+  "执行流程图（自上而下）": "Execution flow (top-down)",
+  "时间轴": "Timeline",
+  "等待中": "Waiting",
+  "事件流": "Event stream",
+  "Strata GPU": "Strata GPU",
+  "过滤事件类型…": "filter event types…",
+  "等待数据…": "Waiting for data…",
+  // 流程图节点文本
+  "用户输入": "User input",
+  "进行中": "running",
+  "生成中": "generating",
+  "缓存读": "cache read",
+  "缓存写": "cache write",
+  "思考": "thinking",
+  "字": "chars",
+  "等参数": "waiting for params",
+  "后台 shell 在跑": "background shell running",
+  "（无参数）": "(no params)",
+  "上下文压缩": "Context compaction",
+  "压缩中": "Compacting",
+  "失败": "failed",
+  "完成": "done",
+  "已完成": "done",
+  "KV 命中": "KV hit",
+  "KV 复用": "KV reuse",
+  "命中": "cache hit",
+  "草稿接受": "draft accept",
+  "运行中": "running",
+  "会话": "sessions",
+  "生成": "output",
+  // 浮层字段
+  "状态": "Status",
+  "时间": "Time",
+  "tokens": "tokens",
+  "输入": "in",
+  "输出": "out",
+  "推理": "think",
+  "结束原因": "Finish reason",
+  "还没结束": "still running",
+  "工具": "tools",
+  "没有工具调用": "no tool calls",
+  "agent / model": "agent / model",
+  "GPU": "GPU",
+  "思考全文": "Full thinking",
+  "参数全文": "Full parameters",
+  "参数": "Parameters",
+  "没捕获到参数文本（错过 input.started）": "no parameter text captured (missed input.started)",
+  "输出预览": "Output preview",
+  "错误": "Error",
+  "进度 metadata": "Progress metadata",
+  "调用": "Call",
+  "已执行": "executed",
+  "未执行（被拦/取消）": "not executed (blocked or cancelled)",
+  "会话标题": "Session title",
+  "会话 id": "Session id",
+  "父会话": "Parent session",
+  "目录": "Directory",
+  "诊断": "Diagnosis",
+  "步数": "Steps",
+  "摘要长度": "Summary length",
+  "GPU（按时间戳近似挂到这一步）": "GPU (matched to this step by timestamp, approximate)",
+  "没按时间戳关联到 Strata 请求": "no Strata request matched by timestamp",
+  "鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭": "Move the mouse into the card to scroll or select text; click to pin, click empty space to close",
+  "复制": "Copy",
+  "已复制 ✓": "Copied ✓",
+  // 头部/横幅/诊断
+  "模型": "Model",
+  "上下文": "context",
+  "排队": "queued",
+  "未发现服务": "no service discovered",
+  "opencode 服务未连通": "opencode server not reachable",
+  "正在重新发现端口": "rediscovering the port",
+  "Strata 指标不可用": "Strata metrics unavailable",
+  "未启动": "not started",
+  "Strata 未连通": "Strata not connected",
+  "没有会话": "No sessions",
+  "空闲": "Idle",
+  "离线": "offline",
+  // GPU 面板
+  "显存": "VRAM",
+  "温度": "temperature",
+  "功率": "power",
+  "缓存命中": "cache hit",
+  "prefill 上限": "prefill cap",
+  "总请求": "total requests",
+  "复用": "reuse",
+  "只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队": "Only 1 inference slot: parallel tool calls and subagents queue serially on the GPU",
+  // 等待面板
+  "权限待批": "Permission pending",
+  "等你回答": "Waiting for your answer",
+  "没有挂起的请求": "Nothing pending.",
+};
+const TD = Object.fromEntries(Object.entries(TE).map(([k, v]) => [v, k]));
+
+let lang = "en";
+try {
+  lang = localStorage.getItem("oc-monitor-lang") || "en";
+} catch {}
+const tr = (s) => (lang === "en" ? (TE[s] ?? s) : (TD[s] ?? s));
+const sep = () => (lang === "zh" ? "：" : ": ");
+
+function applyI18n() {
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const en = el.getAttribute("data-i18n");
+    el.textContent = lang === "zh" ? (TD[en] ?? en) : en;
+  });
+  $("log-filter").placeholder = lang === "zh" ? (TD["filter event types…"] ?? "filter event types…") : "filter event types…";
+  $("lang-toggle").textContent = lang === "en" ? "中文" : "EN";
+}
+
 let snap = null;
 let selected = null;
 let logFilter = "";
@@ -40,6 +157,15 @@ addEventListener("DOMContentLoaded", () => {
     renderLog();
   });
   initHover();
+  applyI18n();
+  $("lang-toggle").addEventListener("click", () => {
+    lang = lang === "en" ? "zh" : "en";
+    try {
+      localStorage.setItem("oc-monitor-lang", lang);
+    } catch {}
+    applyI18n();
+    render();
+  });
 });
 
 function pickSession() {
@@ -65,12 +191,13 @@ function fmtTok(n) {
 function ago(t) {
   if (!t) return "—";
   const s = Math.round((Date.now() - t) / 1000);
-  if (s < 60) return `${s}s 前`;
-  if (s < 3600) return `${Math.round(s / 60)}m 前`;
-  return `${Math.round(s / 3600)}h 前`;
+  const suffix = lang === "zh" ? "前" : "ago";
+  if (s < 60) return `${s}s ${suffix}`;
+  if (s < 3600) return `${Math.round(s / 60)}m ${suffix}`;
+  return `${Math.round(s / 3600)}h ${suffix}`;
 }
 function clock(t) {
-  return new Date(t).toLocaleTimeString("zh-CN", { hour12: false });
+  return new Date(t).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-US", { hour12: false });
 }
 function trunc(s, n) {
   const one = (s ?? "").replace(/\s+/g, " ").trim();
@@ -98,17 +225,18 @@ function pretty(s) {
   }
 }
 function kv(k, v) {
-  return `<div><span class="tip-k">${k}</span> ${esc(v ?? "—")}</div>`;
+  return `<div><span class="tip-k">${tr(k)}</span> ${esc(tr(v ?? "—"))}</div>`;
 }
 function block(label, text) {
   if (!text) return "";
-  return `<div class="tip-k2">${label}<button class="tip-copy" type="button">复制</button></div><pre class="tip-pre">${esc(text)}</pre>`;
+  return `<div class="tip-k2">${tr(label)}<button class="tip-copy" type="button">${tr("复制")}</button></div><pre class="tip-pre">${esc(text)}</pre>`;
 }
 function fmtState(t) {
-  if (t.status === "running") return `运行中（已 ${Math.round((Date.now() - (t.calledAt ?? t.startedAt)) / 1000)}s）`;
-  if (t.status === "done") return `完成${t.exit != null ? ` · exit ${t.exit}` : ""}`;
-  if (t.status === "error") return `失败${t.error ? ` · ${t.error}` : ""}`;
-  return "等参数";
+  const secs = Math.round((Date.now() - (t.calledAt ?? t.startedAt)) / 1000);
+  if (t.status === "running") return lang === "zh" ? `运行中（已 ${secs}s）` : `running (${secs}s)`;
+  if (t.status === "done") return lang === "zh" ? `完成${t.exit != null ? ` · exit ${t.exit}` : ""}` : `done${t.exit != null ? ` · exit ${t.exit}` : ""}`;
+  if (t.status === "error") return lang === "zh" ? `失败${t.error ? ` · ${t.error}` : ""}` : `failed${t.error ? ` · ${t.error}` : ""}`;
+  return lang === "zh" ? "等参数" : "waiting for params";
 }
 function fmtSpan(from, to) {
   if (!from) return "—";
@@ -121,29 +249,31 @@ function stepDetail(step) {
   const rows = [`<div class="tip-h">Step #${step.index}</div>`];
   rows.push(kv("agent / model", `${step.agent ?? "?"}${step.model ? ` · ${step.model.id} (${step.model.providerID ?? "?"})` : ""}`));
   rows.push(kv("状态", running ? "进行中" : step.finish === "error" ? "失败" : "已完成"));
-  rows.push(kv("时间", `${fmtSpan(step.startedAt, step.endedAt)} · 共 ${fmtDur(dur)}`));
+  rows.push(kv("时间", `${fmtSpan(step.startedAt, step.endedAt)} · ${fmtDur(dur)}`));
   if (step.tokens) {
     rows.push(
       kv(
         "tokens",
-        `输入 ${fmtTok(step.tokens.input)} · 输出 ${fmtTok(step.tokens.output)} · 推理 ${fmtTok(step.tokens.reasoning ?? 0)} · 缓存读 ${fmtTok(step.tokens.cache?.read ?? 0)} · 缓存写 ${fmtTok(step.tokens.cache?.write ?? 0)}`
+        `${tr("输入")} ${fmtTok(step.tokens.input)} · ${tr("输出")} ${fmtTok(step.tokens.output)} · ${tr("推理")} ${fmtTok(step.tokens.reasoning ?? 0)} · ${tr("缓存读")} ${fmtTok(step.tokens.cache?.read ?? 0)} · ${tr("缓存写")} ${fmtTok(step.tokens.cache?.write ?? 0)}`
       )
     );
   }
   rows.push(kv("结束原因", step.finish ?? "还没结束"));
   rows.push(kv("工具", step.tools.map((t) => `${t.name}${t.status === "done" ? " ✓" : t.status === "error" ? " ✗" : t.status === "running" ? " …" : " ·"}`).join("   ") || "没有工具调用"));
-  if (step.reasoning?.preview) rows.push(block(`思考全文（${fmtTok(step.reasoning.chars)} 字，可能截断）`, step.reasoning.preview));
+  if (step.reasoning?.preview) {
+    rows.push(block(`${tr("思考全文")} (${fmtTok(step.reasoning.chars)} ${tr("字")}${lang === "zh" ? "，可能截断" : ", may be truncated"})`, step.reasoning.preview));
+  }
   if (step.gpu) {
     rows.push(
       kv(
         "GPU（按时间戳近似挂到这一步）",
-        `prefill ${fmtDur(step.gpu.promptMs)} + decode ${fmtDur(step.gpu.decodeMs)} · ${step.gpu.decodeTokS ? Math.round(step.gpu.decodeTokS) : "?"} tok/s · prompt ${fmtTok(step.gpu.promptTokens)} · KV 复用 ${fmtTok(step.gpu.reused)} · 命中 ${step.gpu.hitRate != null ? Math.round(step.gpu.hitRate * 100) : "?"}% · 草稿接受 ${step.gpu.drafts != null ? Math.round(step.gpu.drafts * 100) : "?"}% · finish ${step.gpu.finish ?? "?"}`
+        `prefill ${fmtDur(step.gpu.promptMs)} + decode ${fmtDur(step.gpu.decodeMs)} · ${step.gpu.decodeTokS ? Math.round(step.gpu.decodeTokS) : "?"} tok/s · prompt ${fmtTok(step.gpu.promptTokens)} · ${tr("KV 复用")} ${fmtTok(step.gpu.reused)} · ${tr("命中")} ${step.gpu.hitRate != null ? Math.round(step.gpu.hitRate * 100) : "?"}% · ${tr("草稿接受")} ${step.gpu.drafts != null ? Math.round(step.gpu.drafts * 100) : "?"}% · finish ${step.gpu.finish ?? "?"}`
       )
     );
   } else {
     rows.push(kv("GPU", "没按时间戳关联到 Strata 请求"));
   }
-  rows.push(`<div class="tip-hint">鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭</div>`);
+  rows.push(`<div class="tip-hint">${tr("鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭")}</div>`);
   return rows.join("");
 }
 
@@ -151,36 +281,39 @@ function chipDetail(tool) {
   const secs = tool.endedAt ? Math.round((tool.endedAt - (tool.calledAt ?? tool.startedAt)) / 1000) : Math.round((Date.now() - (tool.calledAt ?? tool.startedAt)) / 1000);
   const rows = [`<div class="tip-h">${esc(tool.name)}</div>`];
   rows.push(kv("状态", fmtState(tool)));
-  rows.push(kv("时间", `${fmtSpan(tool.startedAt, tool.endedAt)} · 共 ${fmtDur(secs * 1000)}`));
+  rows.push(kv("时间", `${fmtSpan(tool.startedAt, tool.endedAt)} · ${fmtDur(secs * 1000)}`));
   rows.push(kv("调用", tool.executed ? "已执行" : tool.executed === false ? "未执行（被拦/取消）" : "—"));
   const params = pretty(tool.inputText) || (tool.input ? pretty(JSON.stringify(tool.input)) : "");
   rows.push(params ? block("参数全文", params) : kv("参数", "没捕获到参数文本（错过 input.started）"));
   rows.push(block(tool.status === "error" ? "错误" : "输出预览", tool.error ?? tool.preview));
   if (tool.metadata) rows.push(block("进度 metadata", pretty(JSON.stringify(tool.metadata)).slice(0, 600)));
-  rows.push(`<div class="tip-hint">鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭</div>`);
+  rows.push(`<div class="tip-hint">${tr("鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭")}</div>`);
   return rows.join("");
 }
 
 function userDetail(s) {
-  const rows = [`<div class="tip-h">用户输入</div>`];
+  const rows = [`<div class="tip-h">${tr("用户输入")}</div>`];
   rows.push(kv("会话标题", s.title || s.id));
   rows.push(kv("会话 id", s.id));
   if (s.parentID) rows.push(kv("父会话", s.parentID));
   rows.push(kv("agent / model", `${s.agent ?? "?"} · ${s.model?.id ?? "?"} (${s.model?.providerID ?? "?"})`));
   rows.push(kv("目录", s.directory ?? "?"));
   rows.push(kv("状态", `${s.status}${s.outcome ? ` · ${s.outcome}` : ""}`));
-  rows.push(kv("诊断", `${s.diagnosis?.headline ?? "?"}${s.diagnosis?.reasons?.length ? ` — ${s.diagnosis.reasons.join("；")}` : ""}`));
-  if (s.tokens) rows.push(kv("tokens", `输入 ${fmtTok(s.tokens.input)} · 输出 ${fmtTok(s.tokens.output)} · 缓存读 ${fmtTok(s.tokens.cache?.read ?? 0)}`));
-  rows.push(kv("步数", `${s.steps.length} 个 step`));
-  rows.push(`<div class="tip-hint">鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭</div>`);
+  const dg = s.diagnosis;
+  const dh = dg ? (lang === "zh" ? dg.headline : dg.headlineEn ?? dg.headline) : "?";
+  const dr = dg ? (lang === "zh" ? dg.reasons : dg.reasonsEn ?? dg.reasons) : [];
+  rows.push(kv("诊断", `${dh}${dr?.length ? `${sep()}${dr.join(lang === "zh" ? "；" : "; ")}` : ""}`));
+  if (s.tokens) rows.push(kv("tokens", `${tr("输入")} ${fmtTok(s.tokens.input)} · ${tr("输出")} ${fmtTok(s.tokens.output)} · ${tr("缓存读")} ${fmtTok(s.tokens.cache?.read ?? 0)}`));
+  rows.push(kv("步数", lang === "zh" ? `${s.steps.length} 个 step` : `${s.steps.length} steps`));
+  rows.push(`<div class="tip-hint">${tr("鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭")}</div>`);
   return rows.join("");
 }
 
 function compactionDetail(c) {
-  const rows = [`<div class="tip-h">上下文压缩</div>`];
+  const rows = [`<div class="tip-h">${tr("上下文压缩")}</div>`];
   rows.push(kv("状态", c.status === "running" ? "压缩中" : c.status === "failed" ? "失败" : "完成"));
-  rows.push(kv("时间", `${fmtSpan(c.startedAt, c.endedAt)} · 共 ${fmtDur(c.endedAt ? c.endedAt - c.startedAt : Date.now() - c.startedAt)}`));
-  rows.push(kv("摘要长度", `${fmtTok(c.chars)} 字符`));
+  rows.push(kv("时间", `${fmtSpan(c.startedAt, c.endedAt)} · ${fmtDur(c.endedAt ? c.endedAt - c.startedAt : Date.now() - c.startedAt)}`));
+  rows.push(kv("摘要长度", lang === "zh" ? `${fmtTok(c.chars)} 字符` : `${fmtTok(c.chars)} chars`));
   return rows.join("");
 }
 
@@ -219,9 +352,9 @@ function setTipContent(html) {
 function copyText(text, btn) {
   const done = () => {
     if (!btn.isConnected) return;
-    btn.textContent = "已复制 ✓";
+    btn.textContent = tr("已复制 ✓");
     setTimeout(() => {
-      if (btn.isConnected) btn.textContent = "复制";
+      if (btn.isConnected) btn.textContent = tr("复制");
     }, 1200);
   };
   const fallback = () => {
@@ -392,7 +525,7 @@ function nodeH(groups, lh, top = 12, bottom = 12) {
 }
 
 function chip(label, value, tone = "text-ink") {
-  return `<span class="rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono ${tone}">${label} <b class="font-semibold">${value}</b></span>`;
+  return `<span class="rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono ${tone}">${tr(label)} <b class="font-semibold">${value}</b></span>`;
 }
 
 function render() {
@@ -411,7 +544,7 @@ function renderHeader() {
   const s = snap.server;
   const dot = $("svc-dot");
   dot.className = `dot ${s.reachable ? "dot-running" : "dot-error"}`;
-  $("svc-meta").textContent = `${s.url ?? "未发现服务"} · v${s.version ?? "?"} · pid ${s.pid ?? "?"} · 会话 ${snap.sessions.length}`;
+  $("svc-meta").textContent = `${s.url ?? tr("未发现服务")} · v${s.version ?? "?"} · pid ${s.pid ?? "?"} · ${tr("会话")} ${snap.sessions.length}`;
 
   const t = cur()?.tokens ?? {};
   const live = snap.strata.live ?? {};
@@ -420,7 +553,7 @@ function renderHeader() {
     chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
     chip("生成", fmtTok(t.output ?? 0)),
     chip("缓存读", fmtTok(t.cache?.read ?? 0)),
-    chip("GPU", live.state ?? "离线", live.state ? "text-gpu" : "text-error"),
+    chip("GPU", live.state ?? tr("离线"), live.state ? "text-gpu" : "text-error"),
     chip("tok/s", live.tok_s ? Math.round(live.tok_s) : "—", "text-gpu"),
     chip("排队", live.queued ?? 0, live.queued > 0 ? "text-blocked" : "text-ink-dim"),
   ].join("");
@@ -429,8 +562,8 @@ function renderHeader() {
 function renderBanner() {
   const b = $("banner");
   const msgs = [];
-  if (snap.server.reconnecting || !snap.server.reachable) msgs.push(`opencode 服务未连通：${snap.server.lastError ?? "正在重新发现端口"}`);
-  if (!snap.strata.alive) msgs.push(`Strata 指标不可用：${snap.strata.lastError ?? "未启动"}`);
+  if (snap.server.reconnecting || !snap.server.reachable) msgs.push(`${tr("opencode 服务未连通")}${sep()}${snap.server.lastError ?? tr("正在重新发现端口")}`);
+  if (!snap.strata.alive) msgs.push(`${tr("Strata 指标不可用")}${sep()}${snap.strata.lastError ?? tr("未启动")}`);
   b.classList.toggle("hidden", msgs.length === 0);
   b.textContent = msgs.join(" · ");
 }
@@ -438,15 +571,17 @@ function renderBanner() {
 function renderDiagnosis() {
   const s = cur();
   if (!s) {
-    $("diag-headline").textContent = "没有会话";
+    $("diag-headline").textContent = tr("没有会话");
     $("diag-reasons").innerHTML = "";
     return;
   }
   const d = s.diagnosis ?? { level: "idle", headline: "空闲", reasons: [] };
   $("diag-dot").className = `dot dot-${d.level === "running" ? "running" : d.level === "blocked" ? "blocked" : d.level === "error" ? "error" : "idle"}`;
-  $("diag-headline").textContent = d.headline;
+  $("diag-headline").textContent = lang === "zh" ? d.headline : d.headlineEn ?? tr(d.headline);
   $("diag-session").textContent = `${s.title || s.id} · ${s.agent ?? "?"} · ${ago(s.lastEventAt || s.updatedAt)}`;
-  $("diag-reasons").innerHTML = (d.reasons ?? []).map((r) => `<li class="font-mono">${r}</li>`).join("");
+  const reasons = d.reasons ?? [];
+  const shown = lang === "zh" ? reasons : d.reasonsEn ?? reasons.map(tr);
+  $("diag-reasons").innerHTML = shown.map((r) => `<li class="font-mono">${r}</li>`).join("");
 }
 
 function depthOf(id) {
@@ -531,16 +666,16 @@ function stepGroups(step) {
   const running = !step.endedAt;
   const dur = step.endedAt ? step.endedAt - step.startedAt : Date.now() - step.startedAt;
   const tok = step.tokens
-    ? `↑${fmtTok(step.tokens.input)} ↓${fmtTok(step.tokens.output)} 缓存读 ${fmtTok(step.tokens.cache?.read ?? 0)}`
-    : "生成中";
+    ? `↑${fmtTok(step.tokens.input)} ↓${fmtTok(step.tokens.output)} ${tr("缓存读")} ${fmtTok(step.tokens.cache?.read ?? 0)}`
+    : tr("生成中");
   const groups = [
     { cls: "t-title", lines: wrapText(`Step #${step.index} · ${step.agent ?? "?"}${step.model ? ` · ${step.model.id}` : ""}`, STEP_INNER, TITLE_FS, 1) },
-    { cls: "t-sub", lines: wrapText(`${fmtDur(dur)} · ${tok} · ${step.finish ?? (running ? "进行中" : "…")}`, STEP_INNER, SUB_FS, 2) },
+    { cls: "t-sub", lines: wrapText(`${fmtDur(dur)} · ${tok} · ${step.finish ?? (running ? tr("进行中") : "…")}`, STEP_INNER, SUB_FS, 2) },
   ];
   if (step.reasoning?.chars) {
     groups.push({
       cls: "t-sub",
-      lines: wrapText(`思考 ${fmtTok(step.reasoning.chars)} 字${step.reasoning.preview ? `：${step.reasoning.preview}` : ""}`, STEP_INNER, SUB_FS, 2),
+      lines: wrapText(`${tr("思考")} ${fmtTok(step.reasoning.chars)} ${tr("字")}${step.reasoning.preview ? `${sep()}${step.reasoning.preview}` : ""}`, STEP_INNER, SUB_FS, 2),
     });
   }
   if (step.gpu) {
@@ -549,7 +684,7 @@ function stepGroups(step) {
     groups.push({
       cls: "t-gpu",
       lines: wrapText(
-        `GPU prefill ${fmtDur(pre)} + decode ${fmtDur(dec)} · ${step.gpu.decodeTokS ? Math.round(step.gpu.decodeTokS) : "?"} tok/s · KV 命中 ${step.gpu.hitRate != null ? Math.round(step.gpu.hitRate * 100) : "?"}%`,
+        `GPU prefill ${fmtDur(pre)} + decode ${fmtDur(dec)} · ${step.gpu.decodeTokS ? Math.round(step.gpu.decodeTokS) : "?"} tok/s · ${tr("KV 命中")} ${step.gpu.hitRate != null ? Math.round(step.gpu.hitRate * 100) : "?"}%`,
         STEP_INNER,
         SUB_FS,
         2
@@ -574,12 +709,12 @@ function chipGroups(tool) {
   ];
   const head =
     tool.status === "running"
-      ? `已运行 ${secs}s · ${tool.inputText || "（无参数）"}`
+      ? `${lang === "zh" ? `已运行 ${secs}s` : `running ${secs}s`} · ${tool.inputText || tr("（无参数）")}`
       : tool.status === "input"
-        ? `等参数 · ${tool.inputText || "…"}`
+        ? `${tr("等参数")} · ${tool.inputText || "…"}`
         : tool.inputText || "";
   if (head) groups.push({ cls: "t-sub", lines: wrapText(head, CHIP_INNER, SUB_FS, 2) });
-  const tail = tool.status === "error" ? tool.error ?? "" : tool.metadata?.shellID ? "后台 shell 在跑" : tool.preview;
+  const tail = tool.status === "error" ? tool.error ?? "" : tool.metadata?.shellID ? tr("后台 shell 在跑") : tool.preview;
   if (tail) groups.push({ cls: "t-sub", lines: wrapText(tail, CHIP_INNER, SUB_FS, 2) });
   let budget = 5;
   const out = [];
@@ -613,7 +748,7 @@ function renderPipeline() {
 
   // 用户节点
   const userGroups = [
-    { cls: "t-title", lines: wrapText("用户输入", STEP_INNER, TITLE_FS, 1) },
+    { cls: "t-title", lines: wrapText(tr("用户输入"), STEP_INNER, TITLE_FS, 1) },
     { cls: "t-sub", lines: wrapText(s.title || s.id, STEP_INNER, SUB_FS, 2) },
   ];
   const userH = nodeH(userGroups, LH);
@@ -639,11 +774,11 @@ function renderPipeline() {
 
   const compGroups = s.compaction
     ? [
-        { cls: "t-title", lines: wrapText("上下文压缩", CHIP_INNER, TITLE_FS, 1) },
+        { cls: "t-title", lines: wrapText(tr("上下文压缩"), CHIP_INNER, TITLE_FS, 1) },
         {
           cls: "t-sub",
           lines: wrapText(
-            `${s.compaction.status === "running" ? "压缩中" : s.compaction.status === "failed" ? "失败" : "完成"} · ${fmtTok(s.compaction.chars)} 字`,
+            `${s.compaction.status === "running" ? tr("压缩中") : s.compaction.status === "failed" ? tr("失败") : tr("完成")} · ${fmtTok(s.compaction.chars)} ${lang === "zh" ? "字" : "chars"}`,
             CHIP_INNER,
             SUB_FS,
             2
@@ -782,11 +917,14 @@ function renderPipeline() {
   for (const [k, e] of [...edgeEls]) if (!usedEdge.has(k)) { e.remove(); edgeEls.delete(k); }
   for (const k of [...details.keys()]) if (!usedNode.has(k)) details.delete(k);
 
-  // 固定高度的框里把当前 step 垂直居中；用户手动滚动过就暂停自动跟随 8 秒
+  // 固定高度的框里把当前 step（含右侧工具块）垂直居中；用户手动滚动过就暂停自动跟随 8 秒
   const view = box.clientHeight || 0;
   const curRow = rows.find((r) => !r.step.endedAt) ?? rows[rows.length - 1];
   if (view && curRow && Date.now() >= manualScrollUntil) {
-    const top = Math.max(0, Math.min(curRow.y + curRow.h / 2 - view / 2, H - view));
+    const blockH = Math.max(curRow.h, CHIPS_TOP + curRow.chipsH);
+    // 整块放得下就居中；放不下就把块顶贴到视野顶，保证块底不被裁掉
+    const base = blockH > view ? curRow.y : curRow.y + blockH / 2 - view / 2;
+    const top = Math.max(0, Math.min(base, Math.max(0, H - view)));
     if (box.scrollTop !== top) {
       lastAutoTop = top;
       box.scrollTop = top;
@@ -842,7 +980,7 @@ function renderTimeline() {
 function renderGpu() {
   const g = snap.strata;
   if (!g.alive) {
-    $("gpu").innerHTML = `<div class="text-xs text-error font-mono">Strata 未连通：${g.lastError ?? "未启动"}</div>`;
+    $("gpu").innerHTML = `<div class="text-xs text-error font-mono">${tr("Strata 未连通")}${sep()}${g.lastError ?? tr("未启动")}</div>`;
     return;
   }
   const hw = g.hardware ?? {};
@@ -860,34 +998,34 @@ function renderGpu() {
   $("gpu").innerHTML = `
     <div class="grid grid-cols-2 gap-1 text-[11px] font-mono">
       <span class="text-gpu">${live.state ?? "idle"}${live.phase ? ` · ${live.phase}` : ""}</span>
-      <span class="text-ink-dim">排队 ${live.queued ?? 0}</span>
+      <span class="text-ink-dim">${tr("排队")} ${live.queued ?? 0}</span>
       <span class="text-ink-dim">GPU ${hw.gpu_util ?? "?"}%</span>
-      <span class="text-ink-dim">显存 ${memUsed}/${memTotal} GiB</span>
-      <span class="text-ink-dim">温度 ${hw.gpu_temp ?? "?"}℃</span>
-      <span class="text-ink-dim">功率 ${hw.gpu_power ? Math.round(hw.gpu_power) : "?"}W</span>
+      <span class="text-ink-dim">${tr("显存")} ${memUsed}/${memTotal} GiB</span>
+      <span class="text-ink-dim">${tr("温度")} ${hw.gpu_temp ?? "?"}℃</span>
+      <span class="text-ink-dim">${tr("功率")} ${hw.gpu_power ? Math.round(hw.gpu_power) : "?"}W</span>
       <span class="text-ink-dim">tok/s ${live.tok_s ? Math.round(live.tok_s) : "?"}</span>
       <span class="text-ink-dim">slot ${(g.slots ?? []).length ?? "?"}</span>
-      <span class="text-ink-dim">缓存命中 ${hit != null ? Math.round(hit * 100) : "?"}%</span>
-      <span class="text-ink-dim">草稿接受 ${draft != null ? draft : "?"}%</span>
-      <span class="text-ink-dim">上下文 ${ctxPct != null ? ctxPct + "%" : "?"} / ${fmtTok(eng.max_context)}</span>
-      <span class="text-ink-dim">KV ${eng.kv ?? "?"} · prefill 上限 ${fmtTok(eng.prefill_cap)}</span>
+      <span class="text-ink-dim">${tr("缓存命中")} ${hit != null ? Math.round(hit * 100) : "?"}%</span>
+      <span class="text-ink-dim">${tr("草稿接受")} ${draft != null ? draft : "?"}%</span>
+      <span class="text-ink-dim">${tr("上下文")} ${ctxPct != null ? ctxPct + "%" : "?"} / ${fmtTok(eng.max_context)}</span>
+      <span class="text-ink-dim">KV ${eng.kv ?? "?"} · ${tr("prefill 上限")} ${fmtTok(eng.prefill_cap)}</span>
     </div>
     <svg width="260" height="44" class="mt-1">
       <polyline points="0,42 260,42" class="spark-base" />
       <polyline points="${spark}" class="spark" />
     </svg>
-    <div class="text-[11px] text-ink-dim font-mono">总请求 ${tot.requests ?? "?"} · prompt ${fmtTok(tot.prompt_tokens)} · 复用 ${fmtTok(tot.reused)} · 输出 ${fmtTok(tot.output_tokens)}</div>
-    <div class="text-[10px] text-ink-dim">只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队</div>
+    <div class="text-[11px] text-ink-dim font-mono">${tr("总请求")} ${tot.requests ?? "?"} · prompt ${fmtTok(tot.prompt_tokens)} · ${tr("复用")} ${fmtTok(tot.reused)} · ${tr("输出")} ${fmtTok(tot.output_tokens)}</div>
+    <div class="text-[10px] text-ink-dim">${tr("只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队")}</div>
   `;
 }
 
 function renderPending() {
   const p = snap.pending;
   const rows = [];
-  for (const x of p.permissions ?? []) rows.push(`<span class="dot dot-blocked"></span><span class="font-mono">权限待批 ${x.action ?? "?"} · ${trunc((x.resources ?? []).join(", "), 30)}</span>`);
-  for (const x of p.forms ?? []) rows.push(`<span class="dot dot-blocked"></span><span class="font-mono">等你回答：${trunc(x.title, 30)}</span>`);
+  for (const x of p.permissions ?? []) rows.push(`<span class="dot dot-blocked"></span><span class="font-mono">${tr("权限待批")} ${x.action ?? "?"} · ${trunc((x.resources ?? []).join(", "), 30)}</span>`);
+  for (const x of p.forms ?? []) rows.push(`<span class="dot dot-blocked"></span><span class="font-mono">${tr("等你回答")}${sep()}${trunc(x.title, 30)}</span>`);
   for (const x of p.shells ?? []) rows.push(`<span class="dot dot-running"></span><span class="font-mono">shell ${trunc(x.command, 30)} · ${x.status}</span>`);
-  $("pending").innerHTML = rows.length ? rows.join("<br>") : `<span class="text-ink-dim text-xs">没有挂起的请求</span>`;
+  $("pending").innerHTML = rows.length ? rows.join("<br>") : `<span class="text-ink-dim text-xs">${tr("没有挂起的请求")}</span>`;
 }
 
 function renderLog() {

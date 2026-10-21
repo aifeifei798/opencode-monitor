@@ -377,8 +377,8 @@ export function setStats(store, stats) {
   store.stats = stats;
 }
 
-// 「为什么卡住」判定，按优先级给出结论与依据
-export function diagnose(store, session) {
+// 「为什么卡住」判定，按优先级给出结论与依据（中文）
+function diagnoseZh(store, session) {
   const live = store.strata.live ?? {};
   const reasons = [];
   const perms = store.pending.permissions.filter((p) => p.sessionID === session.id);
@@ -429,6 +429,65 @@ export function diagnose(store, session) {
     return { level: "running", headline: "正在生成", reasons: [live.state === "prefill" ? `GPU prefill：已读 ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}，${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "无生成"}`, openStep ? `第 ${openStep.index} 步` : null].filter(Boolean) };
   }
   return { level: "idle", headline: "空闲，等你输入", reasons: session.outcome ? [`上一次结果：${session.outcome}`] : [] };
+}
+
+// 同一优先级逻辑的英文镜像；前端按当前语言选用 headlineEn/reasonsEn（默认英文）
+function diagnoseEn(store, session) {
+  const live = store.strata.live ?? {};
+  const perms = store.pending.permissions.filter((p) => p.sessionID === session.id);
+  const forms = store.pending.forms.filter((f) => f.sessionID === session.id);
+  const running = session.status === "running";
+  const runningTools = running ? [...session.tools.values()].filter((t) => t.status === "running") : [];
+  const openStep = running ? session.steps.find((x) => !x.endedAt) : null;
+  const stalled = runningTools.filter((t) => now() - t.lastProgressAt > 20000);
+
+  if (perms.length) {
+    return {
+      level: "blocked",
+      headline: "Waiting for your approval",
+      reasons: perms.map((p) => `${p.action ?? "permission"}: ${(p.resources ?? []).slice(0, 3).join(", ") || "(no resource list)"}${p.message ? ` — ${p.message}` : ""}`),
+    };
+  }
+  if (forms.length) {
+    return { level: "blocked", headline: "Waiting for your answer", reasons: forms.map((f) => f.title || f.id) };
+  }
+  if (stalled.length) {
+    return {
+      level: "blocked",
+      headline: `Tool stalled: ${stalled[0].name}`,
+      reasons: [`${stalled[0].name} has produced no progress event for ${Math.round((now() - stalled[0].startedAt) / 1000)}s`, stalled[0].inputText ? `params: ${stalled[0].inputText.slice(0, 140)}` : null].filter(Boolean),
+    };
+  }
+  if (session.status === "error") {
+    return { level: "error", headline: "This step failed", reasons: [session.note ?? "unknown error"] };
+  }
+  if (session.status === "interrupted") {
+    return { level: "blocked", headline: "Interrupted", reasons: ["you or the client interrupted this run"] };
+  }
+  if (live.queued > 0) {
+    return { level: "blocked", headline: "Waiting for GPU: request queued", reasons: [`Strata queue has ${live.queued} request(s) (only 1 slot — parallel calls queue serially)`, live.phase ? `current phase: ${live.phase}` : null].filter(Boolean) };
+  }
+  if (session.compaction?.status === "running") {
+    return { level: "blocked", headline: "Compacting context", reasons: [`${session.compaction.chars} characters of summary generated so far`] };
+  }
+  if (session.retry) {
+    return { level: "blocked", headline: "Provider retrying", reasons: [`retry attempt ${session.retry.attempt}${session.retry.error ? `: ${session.retry.error}` : ""}`] };
+  }
+  if (runningTools.length) {
+    const t = runningTools[0];
+    const secs = Math.round((now() - (t.calledAt ?? t.startedAt)) / 1000);
+    return { level: "running", headline: `Running tool: ${t.name}`, reasons: [`running for ${secs}s`, t.metadata?.shellID ? "background shell running" : null, live.state === "generating" ? `GPU generating ${live.generated ?? 0} tokens` : null].filter(Boolean) };
+  }
+  if (session.status === "running" || openStep) {
+    return { level: "running", headline: "Generating", reasons: [live.state === "prefill" ? `GPU prefill: read ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}, ${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "no generation"}`, openStep ? `step ${openStep.index}` : null].filter(Boolean) };
+  }
+  return { level: "idle", headline: "Idle, waiting for input", reasons: session.outcome ? [`last outcome: ${session.outcome}`] : [] };
+}
+
+export function diagnose(store, session) {
+  const zh = diagnoseZh(store, session);
+  const en = diagnoseEn(store, session);
+  return { ...zh, headlineEn: en.headline, reasonsEn: en.reasons };
 }
 
 export function snapshot(store) {

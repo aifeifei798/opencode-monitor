@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>opencode 运行监控</title>
+    <title>opencode live monitor</title>
     <link rel="stylesheet" href="/tailwind.css" />
     <link rel="stylesheet" href="/style.css" />
   </head>
@@ -12,10 +12,11 @@
       <header class="flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
           <span id="svc-dot" class="dot dot-idle"></span>
-          <h1 class="text-lg font-semibold tracking-tight">opencode 运行监控</h1>
+          <h1 id="header-title" data-i18n="opencode live monitor" class="text-lg font-semibold tracking-tight">opencode live monitor</h1>
         </div>
         <div id="svc-meta" class="text-xs text-ink-dim font-mono"></div>
         <div id="chips" class="flex items-center gap-2 flex-wrap ml-auto"></div>
+        <button id="lang-toggle" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink" type="button">中文</button>
       </header>
 
       <div id="banner" class="hidden rounded-md border border-blocked/40 bg-blocked/10 px-3 py-2 text-sm text-blocked"></div>
@@ -24,7 +25,7 @@
       <section class="rounded-lg border border-line bg-panel px-4 py-3">
         <div class="flex items-baseline gap-3">
           <span id="diag-dot" class="dot dot-idle"></span>
-          <h2 id="diag-headline" class="text-base font-semibold">等待数据…</h2>
+          <h2 id="diag-headline" class="text-base font-semibold">Waiting for data…</h2>
           <span id="diag-session" class="text-xs text-ink-dim font-mono ml-auto"></span>
         </div>
         <ul id="diag-reasons" class="mt-2 text-sm text-ink-dim space-y-1"></ul>
@@ -32,31 +33,31 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] gap-3">
         <aside class="rounded-lg border border-line bg-panel p-3">
-          <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">会话树</div>
+          <div data-i18n="Sessions" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Sessions</div>
           <div id="sessions" class="flex flex-col gap-1"></div>
         </aside>
 
         <main class="rounded-lg border border-line bg-panel p-3 flex flex-col gap-2">
-          <div class="text-[11px] uppercase tracking-wider text-ink-dim">执行流程图（自上而下）</div>
+          <div data-i18n="Execution flow (top-down)" class="text-[11px] uppercase tracking-wider text-ink-dim">Execution flow (top-down)</div>
           <div id="pipeline" class="overflow-auto min-h-[420px]"></div>
         </main>
 
         <aside class="flex flex-col gap-3">
           <div class="rounded-lg border border-line bg-panel p-3">
-            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">时间轴</div>
+            <div data-i18n="Timeline" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Timeline</div>
             <div id="timeline" class="flex flex-col gap-1 max-h-[240px] overflow-auto"></div>
           </div>
           <div class="rounded-lg border border-line bg-panel p-3">
-            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Strata GPU</div>
+            <div data-i18n="Strata GPU" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Strata GPU</div>
             <div id="gpu" class="flex flex-col gap-2"></div>
           </div>
           <div class="rounded-lg border border-line bg-panel p-3">
-            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">等待中</div>
+            <div data-i18n="Waiting" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Waiting</div>
             <div id="pending" class="flex flex-col gap-1 text-sm"></div>
           </div>
           <div class="rounded-lg border border-line bg-panel p-3">
-            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">事件流</div>
-            <input id="log-filter" class="w-full mb-2 rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono" placeholder="过滤事件类型…" />
+            <div data-i18n="Event stream" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Event stream</div>
+            <input id="log-filter" class="w-full mb-2 rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono" placeholder="filter event types…" />
             <div id="log" class="flex flex-col gap-1 text-[11px] font-mono max-h-[220px] overflow-auto"></div>
           </div>
         </aside>

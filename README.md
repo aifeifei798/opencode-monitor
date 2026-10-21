@@ -1,63 +1,68 @@
-# opencode 运行监控
+# opencode live monitor
 
-一个本地网页，把 opencode 的执行过程画成实时流程图，并明确回答「现在为什么卡住」。
-**纯只读**：只读取 opencode 的 API/事件流和 Strata 的指标，不调用任何会改变 opencode 状态的接口。
+A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
+**Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
-## 启动
+## Starting
 
-推荐用管理脚本（install / build / start / stop / restart / status / test / logs）：
+Recommended: use the management script (install / build / start / stop / restart / status / test / logs):
 
 ```sh
 cd /home/feifei/develop/opencode/opencode-monitor
-./server.sh install           # npm install + 预编译 CSS（clone 后第一步）
-./server.sh start             # 后台启动，等 /api/health 就绪，pid 记在 /tmp/opencode/monitor.pid
-./server.sh restart           # 改了 src/ 下任何文件后重启（改 public/ 不用重启，刷新浏览器即可）
-./server.sh status            # 进程 + opencode/Strata 连通 + 会话数
-./server.sh test              # 自动确保服务在跑再 npm test
-./server.sh logs [-f]         # 看 /tmp/opencode/monitor.log
+./server.sh install           # npm install + pre-build CSS (first step after a clone)
+./server.sh start             # start in background, wait for /api/health; pid recorded in /tmp/opencode/monitor.pid
+./server.sh restart           # restart after changing anything under src/ (public/ needs no restart, just reload the browser)
+./server.sh status            # process + opencode/Strata connectivity + session count
+./server.sh test              # makes sure the server is running, then npm test
+./server.sh logs [-f]         # tail /tmp/opencode/monitor.log
 open http://127.0.0.1:7788
 ```
 
-也可以直接跑：
+Or run it directly:
 
 ```sh
-node src/server.js            # 或 npm start
+node src/server.js            # or npm start
 ```
 
-Tailwind 已预编译成 `public/tailwind.css`，运行时无任何依赖、断网可用。改样式后才需要重新构建：
+Tailwind is pre-compiled into `public/tailwind.css`, so the runtime has zero dependencies and works offline. Rebuild only after changing styles:
 
 ```sh
 npm run build               # styles/input.css → public/tailwind.css
 ```
 
-## 它从哪里取数据
+## Where the data comes from
 
-- **opencode 服务**：密码读自 `~/.config/opencode/service.json`，端口每 3 秒用 `opencode service status` 重新发现（服务重启换端口会自动重连）。
-- **事件流**：`GET /api/event`（SSE）。映射：`session.execution.*`、`session.step.*`、`session.reasoning.*`、`session.tool.input.*` / `called` / `progress` / `success`、`session.compaction.*`、`session.usage.updated`、`session.created/deleted`（子 agent 树）。
-- **兜底轮询**（3 秒）：`/api/session`、`/api/session/active`、`/api/permission/request`、`/api/form`、`/api/shell`。
-- **Strata GPU**（2 秒）：`http://127.0.0.1:8080` 的 `/metrics`、`/status`、`/slots`、`/api/health`。
+- **opencode service**: password read from `~/.config/opencode/service.json`; the port is re-discovered every 3 seconds via `opencode service status` (auto-reconnects when the service restarts on a new port).
+- **Event stream**: `GET /api/event` (SSE). Mapped: `session.execution.*`, `session.step.*`, `session.reasoning.*`, `session.tool.input.*` / `called` / `progress` / `success`, `session.compaction.*`, `session.usage.updated`, `session.created/deleted` (subagent tree).
+- **Fallback polling** (3 s): `/api/session`, `/api/session/active`, `/api/permission/request`, `/api/form`, `/api/shell`.
+- **Strata GPU** (2 s): `/metrics`, `/status`, `/slots`, `/api/health` on `http://127.0.0.1:8080`.
 
-## 页面上有什么
+## What's on the page
 
-- **诊断卡**：一句中文结论 + 依据。优先级：等你批准权限 → 等你回答问题 → 工具长时间无进度 → GPU 排队（`queued`）→ 上下文压缩 → provider 重试 → 工具在跑 → 正在生成 → 空闲。
-- **流程图**：用户输入 → Step 节点 → 工具扇出（并发调用并排成多支，spinner/勾/叉 + 耗时 + 参数）→ 下一个 Step。连线在 GPU 排队时变黄流动。每个 Step 下方显示 Strata 的 `prefill + decode` 时长、tok/s、KV 命中率（按时间戳近似关联）。
-- **会话树**：按 `parentID` 缩进显示主会话与 subagent 分支，颜色表示状态。
-- **时间轴**：每个 Step 的时长条形图，prefill/decode 双色分段。
-- **Strata 面板**：GPU util、显存、温度、功率、tok/s、排队数、KV 命中率、草稿接受率、上下文占用、util 折线。
-- **等待中 / 事件流**：挂起的权限、待回答的问题、正在跑的 shell；可过滤的事件日志。
+- **Diagnosis card**: one headline + the evidence behind it. Priority: waiting for your approval → waiting for your answer → tool with no progress for a long time → GPU queue (`queued`) → context compaction → provider retry → tool running → generating → idle.
+- **Flow diagram**: user input → Step node → tool fan-out (parallel calls side by side, spinner/check/cross + duration + parameters) → next Step. Edges turn yellow and flow while the GPU queue is backed up. Under each Step: Strata `prefill + decode` time, tok/s, KV hit rate (approximated by timestamp).
+- **Session tree**: main session and subagent branches indented by `parentID`, colored by status.
+- **Timeline**: per-Step duration bars, split into prefill/decode segments.
+- **Strata panel**: GPU util, VRAM, temperature, power, tok/s, queued count, KV hit rate, draft accept rate, context usage, util sparkline.
+- **Waiting / event stream**: pending permissions, unanswered questions, running shells; filterable event log.
+- **Language**: UI defaults to English; a header button toggles Chinese (choice remembered in localStorage).
 
-## 关键事实
+## Hover details
 
-Strata 只有 **1 个推理 slot**（`/slots`），`pool_workers: 7` 是显存池不是并发槽。所以 opencode 的并行工具调用和并行 subagent 在 GPU 上是串行排队的——「看起来卡住」经常就是这里，页面的黄色连线与 `排队 N` 就是它。
+Hover any node for its full content (parameters, output, thinking text, GPU attribution). You can move the mouse into the tooltip to scroll and select text — live refreshes freeze while you're inside it. Click to pin; click empty space to close. Every content block has a copy button. The current Step (with its tool chips) stays vertically centered in the fixed-height frame, or top-aligned when the block doesn't fit.
 
-## 配置
+## Key fact
 
-环境变量：`MONITOR_PORT`（默认 7788）、`MONITOR_HOST`（默认 127.0.0.1）、`STRATA_URL`（默认 `http://127.0.0.1:8080`）、`OPENCODE_SERVICE_FILE`（默认 `~/.config/opencode/service.json`）。
+Strata has **exactly 1 inference slot** (`/slots`); `pool_workers: 7` is a memory pool, not concurrency slots. So opencode's parallel tool calls and parallel subagents queue serially on the GPU — the "looks stuck" moments are usually this, shown on the page as yellow edges and `queued N`.
 
-只监听 127.0.0.1；服务密码只用在服务端请求头里，不会下发到浏览器（`tests/state-test.mjs` 会断言快照里没有 password）。
+## Configuration
 
-## 测试
+Environment variables: `MONITOR_PORT` (default 7788), `MONITOR_HOST` (default 127.0.0.1), `STRATA_URL` (default `http://127.0.0.1:8080`), `OPENCODE_SERVICE_FILE` (default `~/.config/opencode/service.json`).
+
+Binds to 127.0.0.1 only; the service password is used only in server-side request headers and is never sent to the browser (`tests/state-test.mjs` asserts no password appears in snapshots).
+
+## Tests
 
 ```sh
-npm test                    # state-test（纯内存状态机与诊断优先级）+ ui-test（jsdom 渲染冒烟，需要 server 在跑）
+npm test                    # state-test (in-memory state machine + diagnosis priorities) + ui-test (jsdom render smoke test, needs the server running)
 ```
