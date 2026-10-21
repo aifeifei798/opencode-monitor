@@ -1029,7 +1029,12 @@ function renderGpu() {
   const hit = g.requests?.[0]?.hit_rate;
   const draft = g.requests?.[0]?.drafts_offered ? Math.round((g.requests[0].drafts_accepted / g.requests[0].drafts_offered) * 100) : null;
 
-  const spark = (g.history?.gpu_util ?? []).map((v, i) => `${i * 3},${40 - (v / 100) * 38}`).join(" ");
+  // 折线铺满整个宽度：最老样本贴左、最新样本贴右（样本少时自动拉伸间距）
+  const hist = g.history?.gpu_util ?? [];
+  const yOf = (v) => 40 - (v / 100) * 38;
+  const spark = hist.length === 1
+    ? `256,${yOf(hist[0])} 260,${yOf(hist[0])}`
+    : hist.map((v, i) => `${((i * 260) / (hist.length - 1)).toFixed(1)},${yOf(v)}`).join(" ");
   $("gpu").innerHTML = `
     <div class="grid grid-cols-2 gap-1 text-[11px] font-mono">
       <span class="text-gpu">${live.state ?? "idle"}${live.phase ? ` · ${live.phase}` : ""}</span>
