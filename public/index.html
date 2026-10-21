@@ -27,15 +27,6 @@
       <div id="banner" class="hidden rounded-md border border-blocked/40 bg-blocked/10 px-3 py-2 text-sm text-blocked"></div>
       <div id="tip" class="hidden"></div>
 
-      <section class="rounded-lg border border-line bg-panel px-4 py-3">
-        <div class="flex items-baseline gap-3">
-          <span id="diag-dot" class="dot dot-idle"></span>
-          <h2 id="diag-headline" class="text-base font-semibold">Waiting for data…</h2>
-          <span id="diag-session" class="text-xs text-ink-dim font-mono ml-auto"></span>
-        </div>
-        <ul id="diag-reasons" class="mt-2 text-sm text-ink-dim space-y-1"></ul>
-      </section>
-
       <div class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] gap-3">
         <aside class="rounded-lg border border-line bg-panel p-3">
           <div data-i18n="Sessions" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Sessions</div>
@@ -67,6 +58,15 @@
           </div>
         </aside>
       </div>
+
+      <section class="rounded-lg border border-line bg-panel px-4 py-3">
+        <div class="flex items-baseline gap-3">
+          <span id="diag-dot" class="dot dot-idle"></span>
+          <h2 id="diag-headline" class="text-base font-semibold">Waiting for data…</h2>
+          <span id="diag-session" class="text-xs text-ink-dim font-mono ml-auto"></span>
+        </div>
+        <ul id="diag-reasons" class="mt-2 text-sm text-ink-dim space-y-1"></ul>
+      </section>
     </div>
     <script src="/app.js"></script>
   </body>
