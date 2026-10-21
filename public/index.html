@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opencode 运行监控</title>
+    <link rel="stylesheet" href="/tailwind.css" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="min-h-screen bg-bg text-ink font-sans antialiased">
+    <div class="mx-auto max-w-[1400px] px-4 py-4 flex flex-col gap-4">
+      <header class="flex items-center gap-3 flex-wrap">
+        <div class="flex items-center gap-2">
+          <span id="svc-dot" class="dot dot-idle"></span>
+          <h1 class="text-lg font-semibold tracking-tight">opencode 运行监控</h1>
+        </div>
+        <div id="svc-meta" class="text-xs text-ink-dim font-mono"></div>
+        <div id="chips" class="flex items-center gap-2 flex-wrap ml-auto"></div>
+      </header>
+
+      <div id="banner" class="hidden rounded-md border border-blocked/40 bg-blocked/10 px-3 py-2 text-sm text-blocked"></div>
+      <div id="tip" class="hidden"></div>
+
+      <section class="rounded-lg border border-line bg-panel px-4 py-3">
+        <div class="flex items-baseline gap-3">
+          <span id="diag-dot" class="dot dot-idle"></span>
+          <h2 id="diag-headline" class="text-base font-semibold">等待数据…</h2>
+          <span id="diag-session" class="text-xs text-ink-dim font-mono ml-auto"></span>
+        </div>
+        <ul id="diag-reasons" class="mt-2 text-sm text-ink-dim space-y-1"></ul>
+      </section>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] gap-3">
+        <aside class="rounded-lg border border-line bg-panel p-3">
+          <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">会话树</div>
+          <div id="sessions" class="flex flex-col gap-1"></div>
+        </aside>
+
+        <main class="rounded-lg border border-line bg-panel p-3 flex flex-col gap-2">
+          <div class="text-[11px] uppercase tracking-wider text-ink-dim">执行流程图（自上而下）</div>
+          <div id="pipeline" class="overflow-auto min-h-[420px]"></div>
+        </main>
+
+        <aside class="flex flex-col gap-3">
+          <div class="rounded-lg border border-line bg-panel p-3">
+            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">时间轴</div>
+            <div id="timeline" class="flex flex-col gap-1 max-h-[240px] overflow-auto"></div>
+          </div>
+          <div class="rounded-lg border border-line bg-panel p-3">
+            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Strata GPU</div>
+            <div id="gpu" class="flex flex-col gap-2"></div>
+          </div>
+          <div class="rounded-lg border border-line bg-panel p-3">
+            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">等待中</div>
+            <div id="pending" class="flex flex-col gap-1 text-sm"></div>
+          </div>
+          <div class="rounded-lg border border-line bg-panel p-3">
+            <div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">事件流</div>
+            <input id="log-filter" class="w-full mb-2 rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono" placeholder="过滤事件类型…" />
+            <div id="log" class="flex flex-col gap-1 text-[11px] font-mono max-h-[220px] overflow-auto"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

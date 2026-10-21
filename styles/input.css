@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@source "../public";
+
+@theme {
+  --color-bg: #0b0f14;
+  --color-panel: #131a22;
+  --color-panel-2: #1b242e;
+  --color-line: #2a3743;
+  --color-ink: #dbe5ee;
+  --color-ink-dim: #8b9cab;
+  --color-idle: #5b6b7a;
+  --color-running: #38bdf8;
+  --color-blocked: #f5b942;
+  --color-error: #ef5b6b;
+  --color-done: #5dd6a8;
+  --color-gpu: #a78bfa;
+
+  --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --animate-node-pulse: node-pulse 1.7s ease-in-out infinite;
+  --animate-edge-flow: edge-flow 1.1s linear infinite;
+  --animate-spin-node: spin-node 1s linear infinite;
+}
