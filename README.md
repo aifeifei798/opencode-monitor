@@ -5,10 +5,23 @@
 
 ## 启动
 
+推荐用管理脚本（install / build / start / stop / restart / status / test / logs）：
+
 ```sh
 cd /home/feifei/develop/opencode/opencode-monitor
-node src/server.js          # 或 npm start
+./server.sh install           # npm install + 预编译 CSS（clone 后第一步）
+./server.sh start             # 后台启动，等 /api/health 就绪，pid 记在 /tmp/opencode/monitor.pid
+./server.sh restart           # 改了 src/ 下任何文件后重启（改 public/ 不用重启，刷新浏览器即可）
+./server.sh status            # 进程 + opencode/Strata 连通 + 会话数
+./server.sh test              # 自动确保服务在跑再 npm test
+./server.sh logs [-f]         # 看 /tmp/opencode/monitor.log
 open http://127.0.0.1:7788
+```
+
+也可以直接跑：
+
+```sh
+node src/server.js            # 或 npm start
 ```
 
 Tailwind 已预编译成 `public/tailwind.css`，运行时无任何依赖、断网可用。改样式后才需要重新构建：
