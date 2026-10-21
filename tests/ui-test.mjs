@@ -1,8 +1,11 @@
 // UI 冒烟测试：真实快照跑一遍基础渲染，再用固定 fixture 验证布局/折行/悬停详情
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 
-const ROOT = "/home/feifei/develop/opencode/opencode-monitor";
+// 仓库根目录从本文件位置推导（写死本机路径会让 GitHub Actions 找不到文件）
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function load() {
   const dom = new JSDOM(readFileSync(`${ROOT}/public/index.html`, "utf8"), { url: "http://127.0.0.1:7788/", runScripts: "outside-only" });
