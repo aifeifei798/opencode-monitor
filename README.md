@@ -2,18 +2,21 @@
 
 **English** | [中文](README.zh.md)
 
-[![License: Apache-2.0](https://img.shields.io/github/license/aifeifei798/opencode-monitor?style=flat-square&color=5dd6a8)](LICENSE) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20zero--deps-a78bfa?style=flat-square) ![UI](https://img.shields.io/badge/UI-vanilla%20JS%20%2B%20SVG-38bdf8?style=flat-square) ![Safety](https://img.shields.io/badge/READ--ONLY-safe-f5b942?style=flat-square) ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E4%B8%AD%E6%96%87-38bdf8?style=flat-square) ![Theme](https://img.shields.io/badge/theme-%E2%98%80%20%E2%98%BE-a78bfa?style=flat-square) ![Stars](https://img.shields.io/github/stars/aifeifei798/opencode-monitor?style=flat-square) ![Last commit](https://img.shields.io/github/last-commit/aifeifei798/opencode-monitor?style=flat-square&color=8b9cab)
+[![CI](https://img.shields.io/github/actions/workflow/status/aifeifei798/opencode-monitor/ci.yml?style=flat-square&branch=main)](https://github.com/aifeifei798/opencode-monitor/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/github/license/aifeifei798/opencode-monitor?style=flat-square&color=5dd6a8)](LICENSE) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20zero--deps-a78bfa?style=flat-square) ![UI](https://img.shields.io/badge/UI-vanilla%20JS%20%2B%20SVG-38bdf8?style=flat-square) ![Safety](https://img.shields.io/badge/READ--ONLY-safe-f5b942?style=flat-square) ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E4%B8%AD%E6%96%87-38bdf8?style=flat-square) ![Theme](https://img.shields.io/badge/theme-%E2%98%80%20%E2%98%BE-a78bfa?style=flat-square) ![Stars](https://img.shields.io/github/stars/aifeifei798/opencode-monitor?style=flat-square) ![Last commit](https://img.shields.io/github/last-commit/aifeifei798/opencode-monitor?style=flat-square&color=8b9cab)
 
 A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
 **Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
-![opencode live monitor](docs/screenshot-dark.png)
+![dark (moon) theme](docs/screenshot-dark.png)
+![light (sun) theme](docs/screenshot-light.png)
 
-Regenerate the screenshot (server must be running):
+Regenerate the screenshots (server must be running):
 
 ```sh
 google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
   --screenshot=docs/screenshot-dark.png http://127.0.0.1:7788/
+google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
+  --screenshot=docs/screenshot-light.png "http://127.0.0.1:7788/?theme=light"
 ```
 
 ## Starting
@@ -64,6 +67,13 @@ npm run build               # styles/input.css → public/tailwind.css
 
 Hover any node for its full content (parameters, output, thinking text, GPU attribution). You can move the mouse into the tooltip to scroll and select text — live refreshes freeze while you're inside it. Click to pin; click empty space to close. Every content block has a copy button. The current Step (with its tool chips) stays vertically centered in the fixed-height frame, or top-aligned when the block doesn't fit.
 
+## Alerts, shortcuts, replay
+
+- **Stuck alerts**: when the diagnosis is waiting for your approval or your answer, the tab title flashes `⚠ …` and a browser notification fires (permission asked once; one alert per session+reason).
+- **Keyboard**: `T` theme, `L` language, `1`–`9` select session, `Esc` close the pinned tooltip (ignored while typing in inputs).
+- **Replay**: completed sessions show a Replay button — Steps reappear one by one; click again to stop.
+- **Themes**: ☀/☾ header toggle (remembered); `?theme=light|dark` URL param forces a theme (used by screenshots). Narrow screens (<1024px) stack into a single column with a shorter flow frame.
+
 ## Key fact
 
 Strata has **exactly 1 inference slot** (`/slots`); `pool_workers: 7` is a memory pool, not concurrency slots. So opencode's parallel tool calls and parallel subagents queue serially on the GPU — the "looks stuck" moments are usually this, shown on the page as yellow edges and `queued N`.
@@ -79,6 +89,8 @@ Binds to 127.0.0.1 only; the service password is used only in server-side reques
 ```sh
 npm test                    # state-test (in-memory state machine + diagnosis priorities) + ui-test (jsdom render smoke test, needs the server running)
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) starts the monitor and runs `npm test` on every push.
 
 ## License
 

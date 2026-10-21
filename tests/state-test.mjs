@@ -28,11 +28,11 @@ console.log("stalled tool detected:", diagnose(store, s).headline.includes("工�
 
 // 权限挂起优先于一切
 setPending(store, { permissions: [{ id: "p1", sessionID: sid, action: "edit", resources: ["src/a.ts"] }], forms: [], shells: [] });
-console.log("permission wins:", diagnose(store, s).headline === "在等你批准权限");
+console.log("permission wins:", diagnose(store, s).headline === "在等你批准权限" && diagnose(store, s).attention === "approval");
 console.log("reason:", diagnose(store, s).reasons[0]);
 
 setPending(store, { permissions: [], forms: [{ id: "f1", sessionID: sid, title: "选样式" }], shells: [] });
-console.log("form wins:", diagnose(store, s).headline === "在等你回答问题");
+console.log("form wins:", diagnose(store, s).headline === "在等你回答问题" && diagnose(store, s).attention === "question");
 
 // GPU 排队
 setPending(store, { permissions: [], forms: [], shells: [] });
@@ -43,7 +43,7 @@ console.log("gpu queue wins:", diagnose(store, s).headline === "在等 GPU：请
 // 空闲
 setStrata(store, { alive: true, live: { state: "idle", queued: 0 }, requests: [] });
 applyEvent(store, { type: "session.execution.succeeded", data: { sessionID: sid } });
-console.log("idle:", diagnose(store, s).headline === "空闲，等你输入");
+console.log("idle:", diagnose(store, s).headline === "空闲，等你输入" && diagnose(store, s).attention === undefined);
 
 // 子 agent 树
 applyEvent(store, { type: "session.created", data: { sessionID: "ses_child", info: { id: "ses_child", parentID: sid, title: "explore", agent: "explore" } } });

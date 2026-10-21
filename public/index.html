@@ -7,8 +7,10 @@
     <link rel="stylesheet" href="/tailwind.css" />
     <link rel="stylesheet" href="/style.css" />
     <script>
-      try { document.documentElement.dataset.theme = localStorage.getItem("oc-monitor-theme") || "dark"; }
-      catch { document.documentElement.dataset.theme = "dark"; }
+      try {
+        const tp = new URLSearchParams(location.search).get("theme");
+        document.documentElement.dataset.theme = tp === "light" || tp === "dark" ? tp : localStorage.getItem("oc-monitor-theme") || "dark";
+      } catch { document.documentElement.dataset.theme = "dark"; }
     </script>
   </head>
   <body class="min-h-screen bg-bg text-ink font-sans antialiased">
@@ -35,7 +37,10 @@
         </aside>
 
         <main class="rounded-lg border border-line bg-panel p-3 flex flex-col gap-2">
-          <div data-i18n="Execution flow (top-down)" class="text-[11px] uppercase tracking-wider text-ink-dim">Execution flow (top-down)</div>
+          <div class="flex items-center gap-2">
+            <div data-i18n="Execution flow (top-down)" class="text-[11px] uppercase tracking-wider text-ink-dim">Execution flow (top-down)</div>
+            <button id="replay-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap hidden ml-auto" type="button">Replay</button>
+          </div>
           <div id="pipeline" class="overflow-auto min-h-[420px]"></div>
         </main>
 

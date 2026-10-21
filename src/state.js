@@ -391,12 +391,13 @@ function diagnoseZh(store, session) {
   if (perms.length) {
     return {
       level: "blocked",
+      attention: "approval",
       headline: "在等你批准权限",
       reasons: perms.map((p) => `${p.action ?? "permission"}：${(p.resources ?? []).slice(0, 3).join(", ") || "（无资源列表）"}${p.message ? ` — ${p.message}` : ""}`),
     };
   }
   if (forms.length) {
-    return { level: "blocked", headline: "在等你回答问题", reasons: forms.map((f) => f.title || f.id) };
+    return { level: "blocked", attention: "question", headline: "在等你回答问题", reasons: forms.map((f) => f.title || f.id) };
   }
   if (stalled.length) {
     return {
@@ -487,6 +488,7 @@ function diagnoseEn(store, session) {
 export function diagnose(store, session) {
   const zh = diagnoseZh(store, session);
   const en = diagnoseEn(store, session);
+  // attention（"approval"/"question"/undefined）随 zh 分支带出，供前端做标签闪烁与浏览器通知
   return { ...zh, headlineEn: en.headline, reasonsEn: en.reasons };
 }
 

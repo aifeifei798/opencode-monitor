@@ -115,6 +115,9 @@ const TE = {
   "权限待批": "Permission pending",
   "等你回答": "Waiting for your answer",
   "没有挂起的请求": "Nothing pending.",
+  // 回放
+  "回放": "Replay",
+  "回放中…": "Replaying…",
 };
 const TD = Object.fromEntries(Object.entries(TE).map(([k, v]) => [v, k]));
 
@@ -125,14 +128,22 @@ try {
 const tr = (s) => (lang === "en" ? (TE[s] ?? s) : (TD[s] ?? s));
 const sep = () => (lang === "zh" ? "：" : ": ");
 
-// 主题：月亮（深色，默认）/ 太阳（浅色）；头部按钮切换，选择记在 localStorage
+// 主题：月亮（深色，默认）/ 太阳（浅色）；头部按钮切换，选择记在 localStorage；URL ?theme=light|dark 可强制（截图用）
 let theme = "dark";
 try {
-  theme = localStorage.getItem("oc-monitor-theme") || "dark";
+  const tp = new URLSearchParams(location.search).get("theme");
+  theme = tp === "light" || tp === "dark" ? tp : localStorage.getItem("oc-monitor-theme") || "dark";
 } catch {}
 function applyTheme() {
   document.documentElement.dataset.theme = theme;
   $("theme-toggle").textContent = theme === "dark" ? "☀" : "☾";
+}
+function toggleTheme() {
+  theme = theme === "dark" ? "light" : "dark";
+  try {
+    localStorage.setItem("oc-monitor-theme", theme);
+  } catch {}
+  applyTheme();
 }
 
 function applyI18n() {
@@ -143,6 +154,70 @@ function applyI18n() {
   });
   $("log-filter").placeholder = lang === "zh" ? (TD["filter event types…"] ?? "filter event types…") : "filter event types…";
   $("lang-toggle").textContent = lang === "en" ? "文" : "A";
+}
+
+function toggleLang() {
+  lang = lang === "en" ? "zh" : "en";
+  try {
+    localStorage.setItem("oc-monitor-lang", lang);
+  } catch {}
+  applyI18n();
+  render();
+}
+
+// 会话回放：已完成的会话按顺序逐节点重现，每 300ms 放出下一步
+let replay = null;
+let replayTimer = null;
+function toggleReplay() {
+  if (replay) {
+    stopReplay();
+    return;
+  }
+  replay = { revealed: 0 };
+  replayTimer = setInterval(() => {
+    replay.revealed += 1;
+    if (replay.revealed >= (cur()?.steps?.length ?? 0)) stopReplay();
+    else render();
+  }, 300);
+  render();
+}
+function stopReplay() {
+  if (replayTimer) clearInterval(replayTimer);
+  replayTimer = null;
+  replay = null;
+  render();
+}
+
+// 卡住提醒：等你批准/回答时标签页标题闪烁，并尝试浏览器通知（只提醒一次每个 会话+原因 组合）
+let alertTimer = null;
+let alertKey = null;
+function updateAlert(s, d) {
+  const att = d?.attention ?? null;
+  const headline = lang === "zh" ? d?.headline : d?.headlineEn ?? (d ? tr(d.headline) : "");
+  if (!att) {
+    if (alertTimer) {
+      clearInterval(alertTimer);
+      alertTimer = null;
+    }
+    alertKey = null;
+    document.title = tr("opencode 运行监控");
+    return;
+  }
+  if (!alertTimer) {
+    let flash = false;
+    alertTimer = setInterval(() => {
+      flash = !flash;
+      document.title = flash ? `⚠ ${headline}` : tr("opencode 运行监控");
+    }, 900);
+  }
+  const key = `${s.id}:${att}`;
+  if (key !== alertKey) {
+    alertKey = key;
+    if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") new Notification(headline, { body: (d.reasons ?? [])[0] ?? "" });
+      else if (Notification.permission === "default") Notification.requestPermission();
+    }
+  }
 }
 
 let snap = null;
@@ -170,20 +245,25 @@ addEventListener("DOMContentLoaded", () => {
   initHover();
   applyI18n();
   applyTheme();
-  $("theme-toggle").addEventListener("click", () => {
-    theme = theme === "dark" ? "light" : "dark";
-    try {
-      localStorage.setItem("oc-monitor-theme", theme);
-    } catch {}
-    applyTheme();
-  });
-  $("lang-toggle").addEventListener("click", () => {
-    lang = lang === "en" ? "zh" : "en";
-    try {
-      localStorage.setItem("oc-monitor-lang", lang);
-    } catch {}
-    applyI18n();
-    render();
+  $("theme-toggle").addEventListener("click", toggleTheme);
+  $("lang-toggle").addEventListener("click", toggleLang);
+  $("replay-btn").addEventListener("click", toggleReplay);
+  // 快捷键：T 切主题、L 切语言、1-9 选会话、Esc 关浮层（输入框里不拦截）
+  addEventListener("keydown", (ev) => {
+    if (ev.target?.tagName === "INPUT" || ev.target?.tagName === "TEXTAREA") return;
+    if (ev.key === "t") toggleTheme();
+    else if (ev.key === "l") toggleLang();
+    else if (ev.key === "Escape") {
+      tipPinned = null;
+      $("tip").classList.add("hidden");
+    } else if (/^[1-9]$/.test(ev.key)) {
+      const s = snap?.sessions[Number(ev.key) - 1];
+      if (s) {
+        stopReplay();
+        selected = s.id;
+        render();
+      }
+    }
   });
 });
 
@@ -576,6 +656,11 @@ function render() {
   renderGpu();
   renderPending();
   renderLog();
+  // 回放按钮：只对已完成的会话显示
+  const rb = $("replay-btn");
+  const s = cur();
+  rb.classList.toggle("hidden", !(s && s.status !== "running" && (s.steps?.length ?? 0) > 1));
+  rb.textContent = replay ? tr("回放中…") : tr("回放");
 }
 
 function renderHeader() {
@@ -611,6 +696,7 @@ function renderDiagnosis() {
   if (!s) {
     $("diag-headline").textContent = tr("没有会话");
     $("diag-reasons").innerHTML = "";
+    updateAlert(null, null);
     return;
   }
   const d = s.diagnosis ?? { level: "idle", headline: "空闲", reasons: [] };
@@ -620,6 +706,7 @@ function renderDiagnosis() {
   const reasons = d.reasons ?? [];
   const shown = lang === "zh" ? reasons : d.reasonsEn ?? reasons.map(tr);
   $("diag-reasons").innerHTML = shown.map((r) => `<li class="font-mono">${r}</li>`).join("");
+  updateAlert(s, d);
 }
 
 function depthOf(id) {
@@ -649,6 +736,9 @@ function renderSessions() {
     .join("");
   $("sessions").querySelectorAll(".row").forEach((row) =>
     row.addEventListener("click", () => {
+      if (replayTimer) clearInterval(replayTimer);
+      replayTimer = null;
+      replay = null;
       selected = row.dataset.id;
       render();
     })
@@ -819,7 +909,8 @@ function renderPipeline() {
   ];
   const userH = nodeH(userGroups, LH);
 
-  const steps = s.steps ?? [];
+  // 回放中只放出已揭示的 step，其余随定时器逐步出现
+  const steps = replay ? (s.steps ?? []).slice(0, replay.revealed) : s.steps ?? [];
   const rows = steps.map((step) => {
     const groups = stepGroups(step);
     const h = nodeH(groups, LH);

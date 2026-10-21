@@ -162,7 +162,7 @@ const FIXTURE = {
           ],
         },
       ],
-      diagnosis: { level: "blocked", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"], headlineEn: "Waiting for your approval", reasonsEn: ["edit: src/state.js, public/app.js — 改两个文件"] },
+      diagnosis: { level: "blocked", attention: "approval", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"], headlineEn: "Waiting for your approval", reasonsEn: ["edit: src/state.js, public/app.js — 改两个文件"] },
     },
     {
       id: "s2",
@@ -183,6 +183,103 @@ const FIXTURE = {
       retry: null,
       note: null,
       steps: [],
+      diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
+    },
+    {
+      id: "s3",
+      parentID: null,
+      title: "回放专用：已完成的会话",
+      agent: "build",
+      model: { id: "qwen-coder", providerID: "llamacpp" },
+      directory: "/home/feifei/develop/opencode/opencode-monitor",
+      status: "idle",
+      outcome: "succeeded",
+      startedAt: null,
+      idleAt: now - 2000,
+      lastEventAt: now - 2000,
+      updatedAt: now - 2000,
+      tokens: { input: 300, output: 600, cache: { read: 1200 } },
+      cost: 0,
+      compaction: null,
+      retry: null,
+      note: null,
+      steps: [
+        {
+          index: 1,
+          messageID: "m31",
+          startedAt: now - 9000,
+          streamedAt: now - 8000,
+          endedAt: now - 7000,
+          finish: "stop",
+          tokens: { input: 100, output: 200, cache: { read: 800 } },
+          cost: 0,
+          agent: "build",
+          model: { id: "qwen-coder", providerID: "llamacpp" },
+          reasoning: { chars: 120, preview: "先读文件确认结构" },
+          gpu: null,
+          tools: [
+            {
+              id: "d1",
+              name: "read",
+              status: "done",
+              startedAt: now - 7000,
+              calledAt: now - 7000,
+              endedAt: now - 6500,
+              inputText: "tests/ui-test.mjs",
+              metadata: null,
+              exit: null,
+              error: null,
+              preview: "ok",
+              lastProgressAt: now - 6500,
+            },
+          ],
+        },
+        {
+          index: 2,
+          messageID: "m32",
+          startedAt: now - 6500,
+          streamedAt: now - 5500,
+          endedAt: now - 4500,
+          finish: "stop",
+          tokens: { input: 120, output: 240, cache: { read: 900 } },
+          cost: 0,
+          agent: "build",
+          model: { id: "qwen-coder", providerID: "llamacpp" },
+          reasoning: null,
+          gpu: null,
+          tools: [
+            {
+              id: "d2",
+              name: "edit",
+              status: "done",
+              startedAt: now - 4500,
+              calledAt: now - 4500,
+              endedAt: now - 4000,
+              inputText: '{"path":"src/state.js","oldString":"x","newString":"y"}',
+              metadata: null,
+              exit: null,
+              error: null,
+              preview: "Edited src/state.js (1 replacement)",
+              lastProgressAt: now - 4000,
+            },
+          ],
+        },
+        {
+          index: 3,
+          messageID: "m33",
+          startedAt: now - 4000,
+          streamedAt: now - 3200,
+          endedAt: now - 2200,
+          finish: "stop",
+          tokens: { input: 80, output: 160, cache: { read: 950 } },
+          cost: 0,
+          agent: "build",
+          model: { id: "qwen-coder", providerID: "llamacpp" },
+          reasoning: null,
+          gpu: null,
+          tools: [],
+        },
+      ],
       diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
     },
   ],
@@ -264,6 +361,21 @@ console.log("切换太阳主题:", fx.dom.window.document.documentElement.datase
 fdoc.getElementById("theme-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 console.log("切回月亮主题:", fx.dom.window.document.documentElement.dataset.theme === "dark" && fdoc.getElementById("theme-toggle").textContent === "☀");
 
+// 卡住提醒：attention 存在 → 标签页标题在 ⚠ 与基础标题间闪烁
+const t1 = fx.dom.window.document.title;
+await new Promise((r) => setTimeout(r, 950));
+const t2 = fx.dom.window.document.title;
+console.log("卡住时标题闪烁:", t1 !== t2 && (t1.includes("⚠") || t2.includes("⚠")));
+
+// 快捷键：T 切主题、L 切语言、进行中会话不显示回放按钮
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "t" }));
+console.log("键盘 T 切主题:", fx.dom.window.document.documentElement.dataset.theme === "light");
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "t" }));
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "l" }));
+console.log("键盘 L 切语言:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "会话树");
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "l" }));
+console.log("进行中会话不显示回放:", fdoc.getElementById("replay-btn").classList.contains("hidden"));
+
 // 悬停详情 + 钉住
 const stepG = [...svg.querySelectorAll("g.node")].find((g) => (g.getAttribute("data-key") ?? "").startsWith("step:"));
 const chipG = [...svg.querySelectorAll("g.node")].find((g) => g.getAttribute("data-key") === "chip:c2");
@@ -324,6 +436,8 @@ chipG.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true, clien
 console.log("tip pinned:", tip.classList.contains("pinned"));
 stepG.dispatchEvent(mm(50, 50));
 console.log("钉住后不被其它节点顶掉:", tip.classList.contains("pinned") && tip.innerHTML.includes("Full parameters"));
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "Escape" }));
+console.log("Esc 关闭钉住浮层:", tip.classList.contains("hidden"));
 fdoc.getElementById("pipeline").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true, clientX: 5, clientY: 5 }));
 console.log("空白处点击后关闭:", tip.classList.contains("hidden"));
 
@@ -333,3 +447,16 @@ fx.feed(FIXTURE);
 console.log("re-render stable:", fdoc.querySelectorAll("#pipeline g.node").length === before);
 fdoc.querySelector('#sessions .row[data-id="s2"]')?.dispatchEvent(new fx.dom.window.Event("click"));
 console.log("empty session svg:", fdoc.querySelector("#pipeline svg").getAttribute("width"), "| 诊断:", fdoc.getElementById("diag-headline").textContent);
+
+// 会话回放：已完成会话显示回放按钮；点开始后逐 step 放出，再点停止
+fdoc.querySelector('#sessions .row[data-id="s3"]')?.dispatchEvent(new fx.dom.window.Event("click"));
+const rb = fdoc.getElementById("replay-btn");
+console.log("已完成会话显示回放:", !rb.classList.contains("hidden"));
+rb.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("回放进行中标签:", fdoc.getElementById("replay-btn").textContent === "Replaying…");
+const n1 = fdoc.querySelectorAll("#pipeline g.node").length;
+await new Promise((r) => setTimeout(r, 700));
+const n2 = fdoc.querySelectorAll("#pipeline g.node").length;
+console.log("回放逐步放出节点:", n1 === 1 && n2 > n1);
+rb.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("再点停止回放:", fdoc.getElementById("replay-btn").textContent === "Replay" && fdoc.querySelectorAll("#pipeline g.node").length > 1);

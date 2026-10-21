@@ -2,18 +2,21 @@
 
 [English](README.md) | **中文**
 
-[![License: Apache-2.0](https://img.shields.io/github/license/aifeifei798/opencode-monitor?style=flat-square&color=5dd6a8)](LICENSE) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20zero--deps-a78bfa?style=flat-square) ![UI](https://img.shields.io/badge/UI-vanilla%20JS%20%2B%20SVG-38bdf8?style=flat-square) ![Safety](https://img.shields.io/badge/READ--ONLY-safe-f5b942?style=flat-square) ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E4%B8%AD%E6%96%87-38bdf8?style=flat-square) ![Theme](https://img.shields.io/badge/theme-%E2%98%80%20%E2%98%BE-a78bfa?style=flat-square) ![Stars](https://img.shields.io/github/stars/aifeifei798/opencode-monitor?style=flat-square) ![Last commit](https://img.shields.io/github/last-commit/aifeifei798/opencode-monitor?style=flat-square&color=8b9cab)
+[![CI](https://img.shields.io/github/actions/workflow/status/aifeifei798/opencode-monitor/ci.yml?style=flat-square&branch=main)](https://github.com/aifeifei798/opencode-monitor/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/github/license/aifeifei798/opencode-monitor?style=flat-square&color=5dd6a8)](LICENSE) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20zero--deps-a78bfa?style=flat-square) ![UI](https://img.shields.io/badge/UI-vanilla%20JS%20%2B%20SVG-38bdf8?style=flat-square) ![Safety](https://img.shields.io/badge/READ--ONLY-safe-f5b942?style=flat-square) ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E4%B8%AD%E6%96%87-38bdf8?style=flat-square) ![Theme](https://img.shields.io/badge/theme-%E2%98%80%20%E2%98%BE-a78bfa?style=flat-square) ![Stars](https://img.shields.io/github/stars/aifeifei798/opencode-monitor?style=flat-square) ![Last commit](https://img.shields.io/github/last-commit/aifeifei798/opencode-monitor?style=flat-square&color=8b9cab)
 
 一个本地网页，把 opencode 的运行过程画成实时流程图，并直接回答一个问题：**现在为什么卡住**。
 **纯只读**：只读取 opencode 的 API / 事件流和 Strata 指标，绝不调用任何会改变 opencode 状态的接口。
 
-![opencode 实时监控台](docs/screenshot-dark.png)
+![月亮（深色）主题](docs/screenshot-dark.png)
+![太阳（浅色）主题](docs/screenshot-light.png)
 
 重新生成截图（需要服务在跑）：
 
 ```sh
 google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
   --screenshot=docs/screenshot-dark.png http://127.0.0.1:7788/
+google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
+  --screenshot=docs/screenshot-light.png "http://127.0.0.1:7788/?theme=light"
 ```
 
 ## 启动
@@ -64,6 +67,13 @@ npm run build               # styles/input.css → public/tailwind.css
 
 悬停任意节点看完整内容（参数、输出、思考全文、GPU 归因）。鼠标可以移进浮层里滚动、选中文字——你在浮层内时实时刷新会冻结。点击钉住；点空白处关闭。每个内容块都有复制按钮。当前 Step（连同右侧工具块）在固定高度的外框里垂直居中，放不下时贴顶对齐。
 
+## 提醒、快捷键、回放
+
+- **卡住提醒**：诊断处于等你批准或等你回答时，标签页标题闪烁 `⚠ …` 并发浏览器通知（首次征询权限；同一 会话+原因 只提醒一次）。
+- **快捷键**：`T` 切主题、`L` 切语言、`1`–`9` 选会话、`Esc` 关闭钉住浮层（在输入框里打字不拦截）。
+- **回放**：已完成的会话显示回放按钮——Step 按顺序逐个重现；再点一次停止。
+- **主题**：头部 ☀/☾ 切换（记在 localStorage）；URL 参数 `?theme=light|dark` 可强制主题（截图用）。窄屏（<1024px）收成单栏堆叠、流程图外框收矮。
+
 ## 关键事实
 
 Strata **只有 1 个推理槽位**（`/slots`）；`pool_workers: 7` 是内存池，不是并发槽。所以 opencode 的并行工具调用和并行子 agent 在 GPU 上串行排队——「看起来卡住」的时刻多半就是这个，页面上表现为黄色连线和 `queued N`。
@@ -79,6 +89,8 @@ Strata **只有 1 个推理槽位**（`/slots`）；`pool_workers: 7` 是内存�
 ```sh
 npm test                    # state-test（内存状态机 + 诊断优先级）+ ui-test（jsdom 渲染冒烟测试，需要服务在跑）
 ```
+
+GitHub Actions（`.github/workflows/ci.yml`）会在每次 push 时启动监控并跑 `npm test`。
 
 ## 协议
 
