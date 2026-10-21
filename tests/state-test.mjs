@@ -51,3 +51,18 @@ const snap = snapshot(store);
 const child = snap.sessions.find((x) => x.id === "ses_child");
 console.log("child linked:", child?.parentID === sid);
 console.log("password leaked in snapshot:", JSON.stringify(snap).includes("password"));
+
+// STEP_BUFFER 裁剪后：编号仍然单调递增（不会出现一串重复的 #31）
+const store2 = createStore();
+applyEvent(store2, { type: "session.created", data: { sessionID: "ses_buf", info: { id: "ses_buf", title: "buffer test" } } });
+for (let i = 1; i <= 35; i++) {
+  applyEvent(store2, { type: "session.step.started", data: { sessionID: "ses_buf", assistantMessageID: `m${i}`, started: Date.now() - (35 - i) * 1000 } });
+  applyEvent(store2, { type: "session.step.ended", data: { sessionID: "ses_buf", assistantMessageID: `m${i}`, finish: "tool-calls", tokens: null, cost: 0 } });
+}
+// 已被裁掉的 step 的迟到事件不得创建幽灵 step
+applyEvent(store2, { type: "session.tool.input.started", data: { sessionID: "ses_buf", id: "t-old", assistantMessageID: "m1", name: "read" } });
+applyEvent(store2, { type: "session.step.ended", data: { sessionID: "ses_buf", assistantMessageID: "m2", finish: "stop", tokens: null, cost: 0 } });
+const buf = snapshot(store2).sessions.find((x) => x.id === "ses_buf");
+console.log("buffer keeps last 30:", buf.steps.length === 30);
+console.log("step numbering monotonic after trimming:", buf.steps[0].index === 6 && buf.steps.at(-1).index === 35 && new Set(buf.steps.map((x) => x.index)).size === 30);
+console.log("late events for trimmed steps create no ghosts:", buf.steps.every((x) => x.messageID.startsWith("m") && Number(x.messageID.slice(1)) >= 6));

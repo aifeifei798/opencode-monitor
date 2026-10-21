@@ -60,6 +60,7 @@ function sessionOf(store, id, info) {
       startedAt: null,
       idleAt: null,
       steps: [],
+      stepSeq: 1, // step 编号独立递增：steps 会被 STEP_BUFFER 裁剪，不能用 length+1 当编号
       tools: new Map(),
       compaction: null,
       retry: null,
@@ -90,12 +91,12 @@ function mergeInfo(s, info) {
   if (info.time?.idle) s.idleAt = info.time.idle;
 }
 
-function stepOf(s, messageID, startedAt) {
+function stepOf(s, messageID, startedAt, create = true) {
   let step = s.steps.find((x) => x.messageID === messageID);
-  if (!step) {
+  if (!step && create) {
     step = {
       messageID,
-      index: s.steps.length + 1,
+      index: s.stepSeq++,
       startedAt: startedAt ?? now(),
       streamedAt: null,
       endedAt: null,
@@ -134,9 +135,12 @@ function toolOf(s, id, messageID, name) {
       lastProgressAt: now(),
     };
     s.tools.set(id, tool);
-    const step = stepOf(s, messageID);
-    step.tools.push(tool);
-    if (step.tools.length > TOOL_BUFFER) step.tools.splice(0, step.tools.length - TOOL_BUFFER);
+    const step = stepOf(s, messageID, null, false);
+    // step 已被 STEP_BUFFER 裁掉时不挂幽灵节点，工具只留在 Map 里更新状态
+    if (step) {
+      step.tools.push(tool);
+      if (step.tools.length > TOOL_BUFFER) step.tools.splice(0, step.tools.length - TOOL_BUFFER);
+    }
   } else if (name) {
     tool.name = name;
   }
@@ -179,11 +183,15 @@ export function applyEvent(store, ev) {
       }
       break;
     case "session.step.streamed":
-      if (s) stepOf(s, d.assistantMessageID).streamedAt = now();
+      if (s) {
+        const step = stepOf(s, d.assistantMessageID, null, false);
+        if (step) step.streamedAt = now();
+      }
       break;
     case "session.step.ended":
       if (s) {
-        const step = stepOf(s, d.assistantMessageID);
+        const step = stepOf(s, d.assistantMessageID, null, false);
+        if (!step) break;
         step.endedAt = now();
         step.finish = d.finish ?? null;
         step.tokens = d.tokens ?? null;
@@ -192,18 +200,25 @@ export function applyEvent(store, ev) {
       }
       break;
     case "session.reasoning.started":
-      if (s) stepOf(s, d.assistantMessageID).reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" };
+      if (s) {
+        const step = stepOf(s, d.assistantMessageID, null, false);
+        if (step) step.reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" };
+      }
       break;
     case "session.reasoning.delta":
       if (s) {
-        const r = stepOf(s, d.assistantMessageID).reasoning ?? (stepOf(s, d.assistantMessageID).reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" });
+        const step = stepOf(s, d.assistantMessageID, null, false);
+        if (!step) break;
+        const r = step.reasoning ?? (step.reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" });
         r.chars += (d.delta ?? "").length;
         if (r.preview.length < REASONING_PREVIEW) r.preview += d.delta ?? "";
       }
       break;
     case "session.reasoning.ended":
       if (s) {
-        const r = stepOf(s, d.assistantMessageID).reasoning ?? (stepOf(s, d.assistantMessageID).reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" });
+        const step = stepOf(s, d.assistantMessageID, null, false);
+        if (!step) break;
+        const r = step.reasoning ?? (step.reasoning = { startedAt: now(), endedAt: null, chars: 0, preview: "" });
         r.endedAt = now();
         if (d.text) r.preview = d.text.slice(0, REASONING_PREVIEW);
       }

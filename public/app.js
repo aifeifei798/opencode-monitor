@@ -1081,7 +1081,9 @@ function renderPipeline() {
 
   // 固定高度的框里把当前 step（含右侧工具块）垂直居中；用户手动滚动过就暂停自动跟随 8 秒
   const view = box.clientHeight || 0;
-  const curRow = rows.find((r) => !r.step.endedAt) ?? rows[rows.length - 1];
+  // 锚定最后一个未结束的 step（若有残留的未结束旧行，跟随真正的当前行而不是第一条）
+  const openRows = rows.filter((r) => !r.step.endedAt);
+  const curRow = openRows[openRows.length - 1] ?? rows[rows.length - 1];
   if (view && curRow && Date.now() >= manualScrollUntil) {
     const blockH = Math.max(curRow.h, CHIPS_TOP + curRow.chipsH);
     // 整块放得下就居中；放不下就把块顶贴到视野顶，保证块底不被裁掉
