@@ -298,6 +298,13 @@ console.log("块有复制按钮:", !!copyBtn);
 copyBtn?.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 await new Promise((r) => setTimeout(r, 50));
 console.log("复制按钮写入剪贴板:", copied.includes("npm test"));
+// 复制全部：整张浮层的纯文本（不含按钮文字）
+const allBtn = tip.querySelector("button.tip-copy-all");
+console.log("浮层有复制全部按钮:", !!allBtn);
+copied = "";
+allBtn?.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+await new Promise((r) => setTimeout(r, 50));
+console.log("复制全部含状态与参数全文:", copied.includes("Status") && copied.includes("npm test") && !copied.includes("Copy"));
 // 鼠标移进浮层：浮层应留在原地不消失
 fdoc.getElementById("pipeline").dispatchEvent(new fx.dom.window.MouseEvent("mouseleave", { bubbles: true }));
 tip.dispatchEvent(new fx.dom.window.MouseEvent("mouseenter", { bubbles: false }));

@@ -87,6 +87,7 @@ const TE = {
   "没按时间戳关联到 Strata 请求": "no Strata request matched by timestamp",
   "鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭": "Move the mouse into the card to scroll or select text; click to pin, click empty space to close",
   "复制": "Copy",
+  "复制全部": "Copy all",
   "已复制 ✓": "Copied ✓",
   // 头部/横幅/诊断
   "模型": "Model",
@@ -337,7 +338,7 @@ function setTipContent(html) {
   const offsets = card
     ? [card, ...card.querySelectorAll(".tip-pre")].map((el) => ({ top: el.scrollTop, left: el.scrollLeft }))
     : [];
-  t.innerHTML = `<div class="tip-card">${html}</div>`;
+  t.innerHTML = `<div class="tip-card"><div class="tip-topbar"><button class="tip-copy-all" type="button">${tr("复制全部")}</button></div>${html}</div>`;
   const nc = t.querySelector(".tip-card");
   if (!nc) return;
   const els = [nc, ...nc.querySelectorAll(".tip-pre")];
@@ -349,12 +350,27 @@ function setTipContent(html) {
   });
 }
 
-function copyText(text, btn) {
+// 整卡纯文本：去掉按钮与顶栏，每行内容一行
+function cardFullText(card) {
+  if (!card) return "";
+  return [...card.children]
+    .filter((c) => !c.classList.contains("tip-topbar"))
+    .map((c) => {
+      const clone = c.cloneNode(true);
+      clone.querySelectorAll("button").forEach((b) => b.remove());
+      return clone.textContent.trim();
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function copyText(text, btn, restore) {
+  const label = restore ?? tr("复制");
   const done = () => {
     if (!btn.isConnected) return;
     btn.textContent = tr("已复制 ✓");
     setTimeout(() => {
-      if (btn.isConnected) btn.textContent = tr("复制");
+      if (btn.isConnected) btn.textContent = label;
     }, 1200);
   };
   const fallback = () => {
@@ -445,8 +461,12 @@ function initHover() {
     selecting = false;
   });
   t.addEventListener("click", (ev) => {
-    const b = ev.target.closest?.("button.tip-copy");
+    const b = ev.target.closest?.("button.tip-copy, button.tip-copy-all");
     if (!b) return;
+    if (b.classList.contains("tip-copy-all")) {
+      copyText(cardFullText(t.querySelector(".tip-card")), b, tr("复制全部"));
+      return;
+    }
     const pre = b.parentElement?.nextElementSibling;
     copyText(pre?.textContent ?? "", b);
   });

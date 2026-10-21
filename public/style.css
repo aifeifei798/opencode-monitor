@@ -87,6 +87,25 @@
   cursor: pointer;
 }
 .tip-copy:hover { border-color: #7fd6f5; }
+.tip-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 4px;
+  background: #16202a;
+}
+.tip-copy-all {
+  font-size: 10.5px;
+  color: #7fd6f5;
+  background: #0b0f14;
+  border: 1px solid #2a3743;
+  border-radius: 4px;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.tip-copy-all:hover { border-color: #7fd6f5; }
 .tip-pre {
   white-space: pre-wrap;
   word-break: break-all;
