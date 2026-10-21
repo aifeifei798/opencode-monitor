@@ -3,6 +3,15 @@
 A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
 **Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
+![opencode live monitor](docs/screenshot-dark.png)
+
+Regenerate the screenshot (server must be running):
+
+```sh
+google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
+  --screenshot=docs/screenshot-dark.png http://127.0.0.1:7788/
+```
+
 ## Starting
 
 Recommended: use the management script (install / build / start / stop / restart / status / test / logs):
