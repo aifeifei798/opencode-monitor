@@ -1176,7 +1176,7 @@ function renderTimeline() {
   const steps = s?.steps ?? [];
   const max = Math.max(1, ...steps.map((x) => (x.endedAt ?? Date.now()) - x.startedAt));
   $("timeline").innerHTML = steps
-    .slice(-14)
+    .slice(-14).reverse()
     .map((x) => {
       const dur = (x.endedAt ?? Date.now()) - x.startedAt;
       const w = Math.max(4, (dur / max) * 100);
