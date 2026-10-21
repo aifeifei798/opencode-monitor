@@ -119,3 +119,15 @@
   color: #c6d4de;
 }
 .tip-hint { color: #6f8293; margin-top: 6px; font-size: 10.5px; }
+
+/* 深色主题滚动条：细、圆角，悬停变青色（浮层/流程图/事件流/页面全部生效） */
+* { scrollbar-width: thin; scrollbar-color: #3a4c5c transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #3a4c5c;
+  border-radius: 5px;
+  border: 1px solid #22303c;
+}
+::-webkit-scrollbar-thumb:hover { background: #7fd6f5; }
+::-webkit-scrollbar-corner { background: transparent; }
