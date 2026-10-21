@@ -2,6 +2,8 @@
 
 **English** | [中文](README.zh.md)
 
+[![License: Apache-2.0](https://img.shields.io/github/license/aifeifei798/opencode-monitor?style=flat-square&color=5dd6a8)](LICENSE) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20zero--deps-a78bfa?style=flat-square) ![UI](https://img.shields.io/badge/UI-vanilla%20JS%20%2B%20SVG-38bdf8?style=flat-square) ![Safety](https://img.shields.io/badge/READ--ONLY-safe-f5b942?style=flat-square) ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E4%B8%AD%E6%96%87-38bdf8?style=flat-square) ![Theme](https://img.shields.io/badge/theme-%E2%98%80%20%E2%98%BE-a78bfa?style=flat-square) ![Stars](https://img.shields.io/github/stars/aifeifei798/opencode-monitor?style=flat-square) ![Last commit](https://img.shields.io/github/last-commit/aifeifei798/opencode-monitor?style=flat-square&color=8b9cab)
+
 A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
 **Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
