@@ -75,3 +75,7 @@ Binds to 127.0.0.1 only; the service password is used only in server-side reques
 ```sh
 npm test                    # state-test (in-memory state machine + diagnosis priorities) + ui-test (jsdom render smoke test, needs the server running)
 ```
+
+## License
+
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
