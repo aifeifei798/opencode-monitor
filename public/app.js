@@ -125,6 +125,16 @@ try {
 const tr = (s) => (lang === "en" ? (TE[s] ?? s) : (TD[s] ?? s));
 const sep = () => (lang === "zh" ? "：" : ": ");
 
+// 主题：月亮（深色，默认）/ 太阳（浅色）；头部按钮切换，选择记在 localStorage
+let theme = "dark";
+try {
+  theme = localStorage.getItem("oc-monitor-theme") || "dark";
+} catch {}
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  $("theme-toggle").textContent = theme === "dark" ? "☀" : "☾";
+}
+
 function applyI18n() {
   document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
   document.querySelectorAll("[data-i18n]").forEach((el) => {
@@ -159,6 +169,14 @@ addEventListener("DOMContentLoaded", () => {
   });
   initHover();
   applyI18n();
+  applyTheme();
+  $("theme-toggle").addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem("oc-monitor-theme", theme);
+    } catch {}
+    applyTheme();
+  });
   $("lang-toggle").addEventListener("click", () => {
     lang = lang === "en" ? "zh" : "en";
     try {
@@ -760,9 +778,9 @@ function renderPipeline() {
     svg = el("svg", { xmlns: SVGNS }, "block");
     svg.dataset.session = selected ?? "";
     const defs = el("defs", {}, "");
-    for (const [id, color] of [["arr", "#2a3743"], ["arr-active", "#38bdf8"], ["arr-blocked", "#f5b942"], ["arr-done", "#3f5160"]]) {
+    for (const [id, cls] of [["arr", "mk-base"], ["arr-active", "mk-active"], ["arr-blocked", "mk-blocked"], ["arr-done", "mk-done"]]) {
       const m = el("marker", { id, viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" });
-      m.appendChild(el("path", { d: "M0 1.2 L7 4 L0 6.8 Z", fill: color }));
+      m.appendChild(el("path", { d: "M0 1.2 L7 4 L0 6.8 Z" }, cls));
       defs.appendChild(m);
     }
     svg.appendChild(defs);

@@ -257,6 +257,13 @@ console.log("切换中文:", fdoc.querySelector('[data-i18n="Sessions"]').textCo
 fdoc.getElementById("lang-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 console.log("切回英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("diag-headline").textContent === "Waiting for your approval");
 
+// 主题切换：默认月亮（深色），点按钮切太阳（浅色），再切回
+console.log("默认月亮主题:", fx.dom.window.document.documentElement.dataset.theme === "dark" && fdoc.getElementById("theme-toggle").textContent === "☀");
+fdoc.getElementById("theme-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("切换太阳主题:", fx.dom.window.document.documentElement.dataset.theme === "light" && fdoc.getElementById("theme-toggle").textContent === "☾");
+fdoc.getElementById("theme-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+console.log("切回月亮主题:", fx.dom.window.document.documentElement.dataset.theme === "dark" && fdoc.getElementById("theme-toggle").textContent === "☀");
+
 // 悬停详情 + 钉住
 const stepG = [...svg.querySelectorAll("g.node")].find((g) => (g.getAttribute("data-key") ?? "").startsWith("step:"));
 const chipG = [...svg.querySelectorAll("g.node")].find((g) => g.getAttribute("data-key") === "chip:c2");
