@@ -22,6 +22,7 @@
         </div>
         <div id="svc-meta" class="text-xs text-ink-dim font-mono"></div>
         <div class="ml-auto flex items-center gap-2 shrink-0">
+          <button id="help-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap" type="button">?</button>
           <button id="theme-toggle" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap" type="button">☀</button>
           <button id="lang-toggle" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap" type="button">文</button>
         </div>
@@ -29,6 +30,7 @@
 
       <div id="banner" class="hidden rounded-md border border-blocked/40 bg-blocked/10 px-3 py-2 text-sm text-blocked"></div>
       <div id="tip" class="hidden"></div>
+      <div id="help" class="hidden"></div>
 
       <div class="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] gap-3">
         <aside class="rounded-lg border border-line bg-panel p-3">
@@ -39,7 +41,11 @@
         <main class="rounded-lg border border-line bg-panel p-3 flex flex-col gap-2">
           <div class="flex items-center gap-2">
             <div data-i18n="Execution flow (top-down)" class="text-[11px] uppercase tracking-wider text-ink-dim">Execution flow (top-down)</div>
-            <button id="replay-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap hidden ml-auto" type="button">Replay</button>
+            <div class="ml-auto flex items-center gap-2">
+              <button id="export-png-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap" type="button" data-i18n="Export PNG">Export PNG</button>
+              <button id="export-md-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap" type="button" data-i18n="Copy as Markdown">Copy as Markdown</button>
+              <button id="replay-btn" class="rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink-dim hover:text-ink shrink-0 whitespace-nowrap hidden" type="button">Replay</button>
+            </div>
           </div>
           <div id="pipeline" class="overflow-auto min-h-[420px]"></div>
         </main>
@@ -74,6 +80,16 @@
           <span id="diag-session" class="text-xs text-ink-dim font-mono ml-auto"></span>
         </div>
         <ul id="diag-reasons" class="mt-2 text-sm text-ink-dim space-y-1"></ul>
+      </section>
+
+      <section class="rounded-lg border border-line bg-panel px-4 py-3">
+        <div data-i18n="Where the time went (approx)" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Where the time went (approx)</div>
+        <div id="time-breakdown" style="min-height:44px"></div>
+      </section>
+
+      <section class="rounded-lg border border-line bg-panel px-4 py-3">
+        <div data-i18n="Diagnosis history" class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">Diagnosis history</div>
+        <div id="diag-history" style="min-height:44px"></div>
       </section>
     </div>
     <script src="/app.js"></script>

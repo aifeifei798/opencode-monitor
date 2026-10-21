@@ -189,3 +189,27 @@ html[data-theme="light"] {
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--hover); }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* 时间去向 / 诊断历史带的色块：全部走主题变量 */
+.seg-gen { background: var(--color-gpu); }
+.seg-tools { background: var(--color-running); }
+.seg-wait,
+.seg-approval, .seg-question, .seg-stalled, .seg-queue, .seg-compaction, .seg-retry, .seg-interrupted { background: var(--color-blocked); }
+.seg-tool { background: var(--color-running); }
+.seg-error { background: var(--color-error); }
+.seg-idle, .seg-rest { background: var(--color-idle); }
+
+/* 帮助浮层：居中卡片，Esc / ? 关 */
+#help {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(420px, calc(100vw - 32px));
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}

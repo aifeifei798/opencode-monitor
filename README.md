@@ -7,6 +7,8 @@
 A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
 **Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
+**Live demo (no server needed)**: [https://aifeifei798.github.io/opencode-monitor/?demo=1](https://aifeifei798.github.io/opencode-monitor/?demo=1) plays a scripted session — steps, tool fan-out, approval wait, GPU queue — entirely in the browser.
+
 ![dark (moon) theme](docs/screenshot-dark.png)
 ![light (sun) theme](docs/screenshot-light.png)
 
@@ -56,10 +58,12 @@ npm run build               # styles/input.css → public/tailwind.css
 ## What's on the page
 
 - **Diagnosis card**: one headline + the evidence behind it. Priority: waiting for your approval → waiting for your answer → tool with no progress for a long time → GPU queue (`queued`) → context compaction → provider retry → tool running → generating → idle.
-- **Flow diagram**: user input → Step node → tool fan-out (parallel calls side by side, spinner/check/cross + duration + parameters) → next Step. Edges turn yellow and flow while the GPU queue is backed up. Under each Step: Strata `prefill + decode` time, tok/s, KV hit rate (approximated by timestamp).
-- **Session tree**: main session and subagent branches indented by `parentID`, colored by status.
+- **Flow diagram**: user input → Step node → tool fan-out (parallel calls side by side, spinner/check/cross + duration + parameters) → next Step. Edges turn yellow and flow while the GPU queue is backed up. Under each Step: Strata `prefill + decode` time, tok/s, KV hit rate (approximated by timestamp). Export buttons: save the diagram as a 2× PNG, or copy the whole session as Markdown.
+- **Session tree**: main session and subagent branches indented by `parentID`, colored by status; each row shows the session's current diagnosis state (waiting for approval / GPU queued / generating / idle …).
 - **Timeline**: per-Step duration bars, split into prefill/decode segments.
-- **Strata panel**: GPU util, VRAM, temperature, power, tok/s, queued count, KV hit rate, draft accept rate, context usage, util sparkline.
+- **Strata panel**: GPU util, VRAM, temperature, power, tok/s, queued count, KV hit rate, draft accept rate, context usage, util sparkline, plus tok/s / queued / cache-hit trend sparklines from the monitor's own samples.
+- **Where the time went**: a stacked bar splitting wall-clock time into generation / tool exec / waiting for you (resolved approvals & questions) / other (queue etc.) — approximate, covering the retained step buffer.
+- **Diagnosis history**: a colored band showing every diagnosis transition (generating → waiting for approval → GPU queued …) with per-state durations.
 - **Waiting / event stream**: pending permissions, unanswered questions, running shells; filterable event log.
 - **Language**: UI defaults to English; a header button toggles Chinese (choice remembered in localStorage).
 
@@ -70,9 +74,9 @@ Hover any node for its full content (parameters, output, thinking text, GPU attr
 ## Alerts, shortcuts, replay
 
 - **Stuck alerts**: when the diagnosis is waiting for your approval or your answer, the tab title flashes `⚠ …` and a browser notification fires (permission asked once; one alert per session+reason).
-- **Keyboard**: `T` theme, `L` language, `1`–`9` select session, `Esc` close the pinned tooltip (ignored while typing in inputs).
+- **Keyboard**: `T` theme, `L` language, `1`–`9` select session, `?` toggles the shortcuts/legend overlay, `Esc` closes overlays (ignored while typing in inputs).
 - **Replay**: completed sessions show a Replay button — Steps reappear one by one; click again to stop.
-- **Themes**: ☀/☾ header toggle (remembered); `?theme=light|dark` URL param forces a theme (used by screenshots). Narrow screens (<1024px) stack into a single column with a shorter flow frame.
+- **Themes**: ☀/☾ header toggle (remembered); `?theme=light|dark` URL param forces a theme (used by screenshots); `?demo=1` plays the built-in scripted demo without a server (used by GitHub Pages). Narrow screens (<1024px) stack into a single column with a shorter flow frame.
 
 ## Key fact
 

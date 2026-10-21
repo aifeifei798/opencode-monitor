@@ -118,6 +118,44 @@ const TE = {
   // 回放
   "回放": "Replay",
   "回放中…": "Replaying…",
+  // 诊断类别标签（会话行 / 历史带）
+  "等你批准": "Waiting for approval",
+  "工具卡住": "Tool stalled",
+  "出错": "Error",
+  "被中断": "Interrupted",
+  "GPU 排队": "GPU queued",
+  "重试中": "Retrying",
+  "正在跑工具": "Running tool",
+  "正在生成": "Generating",
+  // 时间去向
+  "时间去向（近似）": "Where the time went (approx)",
+  "生成耗时": "Generation",
+  "工具耗时": "Tool exec",
+  "等你耗时": "Waiting for you",
+  "其余（排队等）": "Other (queue etc.)",
+  "暂无数据": "no data yet",
+  // 诊断历史带
+  "诊断历史": "Diagnosis history",
+  "无状态迁移": "No state transitions yet",
+  // 帮助浮层
+  "快捷键与图例": "Shortcuts & legend",
+  "切换主题": "Toggle theme",
+  "切换语言": "Toggle language",
+  "选择会话": "Pick a session",
+  "关闭浮层": "Close overlay",
+  "开关此说明": "Toggle this help",
+  "蓝=运行中": "Blue = running",
+  "黄=等你或排队": "Yellow = waiting for you / queued",
+  "红=错误": "Red = error",
+  "灰=空闲": "Gray = idle",
+  "紫=GPU 相关": "Purple = GPU",
+  "点击节点看详情": "Click a node for details",
+  "导出 PNG": "Export PNG",
+  "复制为 Markdown": "Copy as Markdown",
+  // GPU 趋势小图
+  "tok/s 趋势": "tok/s trend",
+  "排队趋势": "queued trend",
+  "缓存命中趋势": "cache hit trend",
 };
 const TD = Object.fromEntries(Object.entries(TE).map(([k, v]) => [v, k]));
 
@@ -127,6 +165,14 @@ try {
 } catch {}
 const tr = (s) => (lang === "en" ? (TE[s] ?? s) : (TD[s] ?? s));
 const sep = () => (lang === "zh" ? "：" : ": ");
+
+// 诊断类别 → 短标签（会话行、历史带用；中文是事实来源，英文走 TE）
+const KEY_LABEL = {
+  approval: "等你批准", question: "等你回答", stalled: "工具卡住", error: "出错",
+  interrupted: "被中断", queue: "GPU 排队", compaction: "压缩中", retry: "重试中",
+  tool: "正在跑工具", gen: "正在生成", idle: "空闲",
+};
+const keyLabel = (k) => tr(KEY_LABEL[k ?? "idle"] ?? "空闲");
 
 // 主题：月亮（深色，默认）/ 太阳（浅色）；头部按钮切换，选择记在 localStorage；URL ?theme=light|dark 可强制（截图用）
 let theme = "dark";
@@ -232,12 +278,17 @@ let inited = false;
 addEventListener("DOMContentLoaded", () => {
   if (inited) return; // jsdom/重复事件下防止监听器重复注册
   inited = true;
-  const es = new EventSource("/api/stream");
-  es.addEventListener("snap", (e) => {
-    snap = JSON.parse(e.data);
-    pickSession();
-    render();
-  });
+  // ?demo=1：不连 EventSource，播放内置脚本快照（GitHub Pages 在线 demo）
+  if (new URLSearchParams(location.search).get("demo") === "1") {
+    startDemo();
+  } else {
+    const es = new EventSource("/api/stream");
+    es.addEventListener("snap", (e) => {
+      snap = JSON.parse(e.data);
+      pickSession();
+      render();
+    });
+  }
   $("log-filter").addEventListener("input", (ev) => {
     logFilter = ev.target.value.toLowerCase();
     renderLog();
@@ -248,14 +299,19 @@ addEventListener("DOMContentLoaded", () => {
   $("theme-toggle").addEventListener("click", toggleTheme);
   $("lang-toggle").addEventListener("click", toggleLang);
   $("replay-btn").addEventListener("click", toggleReplay);
-  // 快捷键：T 切主题、L 切语言、1-9 选会话、Esc 关浮层（输入框里不拦截）
+  $("help-btn").addEventListener("click", toggleHelp);
+  $("export-png-btn").addEventListener("click", exportPng);
+  $("export-md-btn").addEventListener("click", copyMarkdown);
+  // 快捷键：T 切主题、L 切语言、1-9 选会话、? 帮助浮层、Esc 关浮层（输入框里不拦截）
   addEventListener("keydown", (ev) => {
     if (ev.target?.tagName === "INPUT" || ev.target?.tagName === "TEXTAREA") return;
     if (ev.key === "t") toggleTheme();
     else if (ev.key === "l") toggleLang();
+    else if (ev.key === "?") toggleHelp();
     else if (ev.key === "Escape") {
       tipPinned = null;
       $("tip").classList.add("hidden");
+      $("help").classList.add("hidden");
     } else if (/^[1-9]$/.test(ev.key)) {
       const s = snap?.sessions[Number(ev.key) - 1];
       if (s) {
@@ -656,6 +712,8 @@ function render() {
   renderGpu();
   renderPending();
   renderLog();
+  renderTime();
+  renderHistory();
   // 回放按钮：只对已完成的会话显示
   const rb = $("replay-btn");
   const s = cur();
@@ -729,8 +787,8 @@ function renderSessions() {
       const indent = depthOf(s.id) * 12;
       return `<div class="row ${s.id === selected ? "row-sel" : ""}" data-id="${s.id}" style="padding-left:${indent + 4}px">
         <span class="dot ${tone}"></span>
-        <span class="text-xs truncate flex-1">${trunc(s.title || s.id, 26)}</span>
-        <span class="text-[10px] font-mono text-ink-dim">${s.agent ?? "?"}</span>
+        <span class="text-xs truncate flex-1">${trunc(s.title || s.id, 22)}</span>
+        <span class="text-[10px] font-mono whitespace-nowrap ${lvl === "blocked" ? "text-blocked" : lvl === "running" ? "text-gpu" : "text-ink-dim"}">${keyLabel(s.diagnosis?.key)}</span>
       </div>`;
     })
     .join("");
@@ -1164,6 +1222,14 @@ function renderGpu() {
   const spark = hist.length === 1
     ? `256,${yOf(hist[0])} 260,${yOf(hist[0])}`
     : hist.map((v, i) => `${((i * 260) / (hist.length - 1)).toFixed(1)},${yOf(v)}`).join(" ");
+  // 趋势小图：用监控自己的轮询采样（tok/s、排队、缓存命中）
+  const sm = g.samples ?? [];
+  const mini = (label, vals, scaleMax) => {
+    if (!vals.length) return `<div class="flex items-center gap-2"><span class="text-[11px] font-mono text-ink-dim">${tr(label)}</span><svg width="170" height="20"><polyline points="0,18 170,18" class="spark-base"/></svg></div>`;
+    const mx = Math.max(scaleMax ?? 0, ...vals, 1);
+    const pts = vals.map((v, i) => `${((i * 170) / Math.max(1, vals.length - 1)).toFixed(1)},${(18 - (v / mx) * 16).toFixed(1)}`).join(" ");
+    return `<div class="flex items-center gap-2"><span class="text-[11px] font-mono text-ink-dim">${tr(label)}</span><svg width="170" height="20"><polyline points="0,18 170,18" class="spark-base"/><polyline points="${pts}" class="spark"/></svg></div>`;
+  };
   $("gpu").innerHTML = `
     <div class="grid grid-cols-2 gap-1 text-[11px] font-mono">
       <span class="text-gpu">${live.state ?? "idle"}${live.phase ? ` · ${live.phase}` : ""}</span>
@@ -1183,9 +1249,224 @@ function renderGpu() {
       <polyline points="0,42 260,42" class="spark-base" />
       <polyline points="${spark}" class="spark" />
     </svg>
+    ${mini("tok/s 趋势", sm.map((x) => x.tok_s ?? 0))}
+    ${mini("排队趋势", sm.map((x) => x.queued ?? 0))}
+    ${mini("缓存命中趋势", sm.map((x) => (x.hit != null ? Math.round(x.hit * 100) : 0)), 100)}
     <div class="text-[11px] text-ink-dim font-mono">${tr("总请求")} ${tot.requests ?? "?"} · prompt ${fmtTok(tot.prompt_tokens)} · ${tr("复用")} ${fmtTok(tot.reused)} · ${tr("输出")} ${fmtTok(tot.output_tokens)}</div>
     <div class="text-[10px] text-ink-dim">${tr("只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队")}</div>
   `;
+}
+
+// —— 时间去向：生成 / 工具 / 等你 / 其余 的堆叠条（近似值，只含 STEP_BUFFER 内保留的 step）——
+function renderTime() {
+  const t = cur()?.time;
+  const el = $("time-breakdown");
+  if (!t || !t.wall) {
+    el.innerHTML = `<span class="text-xs text-ink-dim">${tr("暂无数据")}</span>`;
+    return;
+  }
+  const rest = Math.max(0, t.wall - t.gen - t.tools - t.wait);
+  const segs = [
+    ["生成耗时", t.gen, "seg-gen"],
+    ["工具耗时", t.tools, "seg-tools"],
+    ["等你耗时", t.wait, "seg-wait"],
+    ["其余（排队等）", rest, "seg-rest"],
+  ];
+  const total = Math.max(1, t.wall);
+  const bar = segs.map(([label, ms, cls]) => (ms > 0 ? `<div class="${cls}" style="width:${((ms / total) * 100).toFixed(1)}%" title="${tr(label)} ${fmtDur(ms)}"></div>` : "")).join("");
+  const legend = segs
+    .filter(([, ms]) => ms > 0)
+    .map(([label, ms, cls]) => `<span class="text-[11px] font-mono text-ink-dim"><i class="${cls} inline-block w-2 h-2 rounded-sm mr-1"></i>${tr(label)} ${fmtDur(ms)} · ${Math.round((ms / total) * 100)}%</span>`)
+    .join("");
+  el.innerHTML = `<div class="flex h-3 rounded overflow-hidden border border-line">${bar}</div><div class="mt-1 flex gap-3 flex-wrap">${legend}</div>`;
+}
+
+// —— 诊断历史带：每次诊断状态迁移一段色块，宽度按持续时长 ——
+function renderHistory() {
+  const el = $("diag-history");
+  const h = cur()?.diagHistory ?? [];
+  if (!h.length) {
+    el.innerHTML = `<span class="text-xs text-ink-dim">${tr("无状态迁移")}</span>`;
+    return;
+  }
+  const nowMs = Date.now();
+  const segs = h.map((x, i) => ({ key: x.key, ms: Math.max(0, (i + 1 < h.length ? h[i + 1].at : nowMs) - x.at) }));
+  const total = segs.reduce((a, x) => a + x.ms, 0) || 1;
+  const bar = segs
+    .map((x) => `<div class="seg-${x.key}" style="width:${Math.max(1.5, (x.ms / total) * 100).toFixed(1)}%" title="${keyLabel(x.key)} · ${fmtDur(x.ms)}"></div>`)
+    .join("");
+  const tail = segs
+    .slice(-6)
+    .map((x) => `<span class="text-[11px] font-mono ${x.key === "idle" ? "text-ink-dim" : `text-${x.key === "error" ? "error" : x.key === "gen" || x.key === "tool" ? "gpu" : "blocked"}`}">${keyLabel(x.key)} ${fmtDur(x.ms)}</span>`)
+    .join("");
+  el.innerHTML = `<div class="flex h-3 rounded overflow-hidden border border-line">${bar}</div><div class="mt-1 flex gap-3 flex-wrap">${tail}</div>`;
+}
+
+// —— 帮助浮层：快捷键 + 图例 ——
+function toggleHelp() {
+  const h = $("help");
+  if (h.classList.contains("hidden")) {
+    h.innerHTML = helpHtml();
+    h.classList.remove("hidden");
+  } else {
+    h.classList.add("hidden");
+  }
+}
+function helpHtml() {
+  const kb = [["T", tr("切换主题")], ["L", tr("切换语言")], ["1–9", tr("选择会话")], ["?", tr("开关此说明")], ["Esc", tr("关闭浮层")]];
+  const legend = [
+    ["dot dot-running", tr("蓝=运行中")],
+    ["dot dot-blocked", tr("黄=等你或排队")],
+    ["dot dot-error", tr("红=错误")],
+    ["dot dot-idle", tr("灰=空闲")],
+  ];
+  return `<div class="text-[11px] uppercase tracking-wider text-ink-dim mb-2">${tr("快捷键与图例")}</div>
+    <div class="flex flex-col gap-1 text-xs">
+      ${kb.map(([k, v]) => `<div class="flex gap-2 items-center"><kbd class="font-mono rounded border border-line bg-panel-2 px-2 py-0.5 text-[11px]">${k}</kbd><span class="text-ink-dim">${v}</span></div>`).join("")}
+    </div>
+    <div class="mt-2 flex flex-col gap-1 text-xs">
+      ${legend.map(([c, v]) => `<div class="flex gap-2 items-center"><span class="${c}"></span><span class="text-ink-dim">${v}</span></div>`).join("")}
+    </div>
+    <div class="mt-2 text-xs text-ink-dim">${tr("点击节点看详情")}</div>`;
+}
+
+// —— 导出：当前流程图存 PNG（2x，背景取当前主题色）——
+async function exportPng() {
+  const svg = $("pipeline").querySelector("svg");
+  if (!svg) return;
+  const w = svg.width.baseVal.value || 620;
+  const hgt = svg.height.baseVal.value || 400;
+  const img = new Image();
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  await img.decode();
+  const cv = document.createElement("canvas");
+  cv.width = w * 2;
+  cv.height = hgt * 2;
+  const ctx = cv.getContext("2d");
+  ctx.scale(2, 2);
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--color-bg").trim() || "#0d1117";
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, hgt);
+  ctx.drawImage(img, 0, 0);
+  cv.toBlob((b) => {
+    if (!b) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "opencode-flow.png";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+
+// —— 导出：当前会话全部节点复制为 Markdown ——
+function copyMarkdown() {
+  const s = cur();
+  if (!s) return;
+  const lines = [`# ${s.title || s.id}`, "", `status: ${s.status}${s.diagnosis?.headlineEn ? ` · ${s.diagnosis.headlineEn}` : ""}`, ""];
+  for (const st of s.steps ?? []) {
+    const done = st.endedAt ? st.finish ?? "done" : "running";
+    const tok = st.tokens ? ` · ${st.tokens.output ?? 0} out` : "";
+    lines.push(`## Step #${st.index} — ${done}${tok}`);
+    for (const t of st.tools ?? []) lines.push(`- ${t.name}: ${t.status}${t.exit != null ? ` (exit ${t.exit})` : ""}${t.error ? ` — ${t.error}` : ""}`);
+  }
+  copyText(lines.join("\n"), $("export-md-btn"), tr("复制为 Markdown"));
+}
+
+// —— 在线 demo：?demo=1 播放内置脚本快照（无服务端也能看流程图效果）——
+function startDemo() {
+  const t0 = Date.now();
+  let tick = 0;
+  let samples = [];
+  const mk = () => {
+    const cycle = tick % 60;
+    const approval = cycle >= 20 && cycle <= 26;
+    const queue = cycle >= 44 && cycle <= 50;
+    const nsteps = Math.min(12, Math.floor(cycle / 5) + 1);
+    const steps = [];
+    for (let i = 0; i < nsteps; i++) {
+      const local = cycle - i * 5;
+      const startedAt = t0 + i * 4500;
+      const streamedAt = local >= 1 ? startedAt + 2000 : null;
+      const endedAt = local >= 4 ? startedAt + 4200 : null;
+      const tools = local >= 1
+        ? [
+            {
+              id: `td${i}`, name: ["shell", "read", "edit"][i % 3], status: local >= 3 ? "done" : "running",
+              startedAt, calledAt: local >= 2 ? startedAt + 2200 : null, endedAt: local >= 3 ? startedAt + 3600 : null,
+              inputText: `demo ${i}`, input: null, metadata: null, exit: local >= 3 ? 0 : null, error: null,
+              preview: "demo output", lastProgressAt: startedAt + 3200,
+            },
+          ]
+        : [];
+      steps.push({
+        index: i + 1, messageID: `md${i}`, startedAt, streamedAt, endedAt,
+        finish: endedAt ? "tool-calls" : null,
+        tokens: endedAt ? { input: 800 + i * 300, output: 240 + i * 120, cache: { read: 6000 } } : null,
+        cost: 0, agent: "build", model: { id: "qwen-coder", providerID: "llamacpp" },
+        reasoning: endedAt ? { startedAt, endedAt: startedAt + 1200, chars: 420, preview: "Demo reasoning preview…" } : null,
+        gpu: endedAt ? { approx: true, promptMs: 900, decodeMs: 2300, decodeTokS: 36, promptTokens: 1400, reused: 1100, hitRate: 0.78 } : null,
+        tools,
+      });
+    }
+    const diag = approval
+      ? { level: "blocked", key: "approval", attention: "approval", headline: "在等你批准权限", headlineEn: "Waiting for your approval", reasons: ["edit：src/demo.ts"] }
+      : queue
+        ? { level: "blocked", key: "queue", headline: "在等 GPU：请求排队中", headlineEn: "Waiting for GPU: request queued", reasons: ["Strata queue has 2 request(s) (only 1 slot)"] }
+        : { level: "running", key: "gen", headline: "正在生成", headlineEn: "Generating", reasons: [`GPU generating, ${Math.round(30 + (tick % 8) * 3)} tok/s`, `step ${nsteps}`] };
+    const gen = steps.reduce((a, x) => a + (x.streamedAt && x.startedAt ? x.streamedAt - x.startedAt : 0), 0);
+    const toolsMs = steps.reduce((a, x) => a + (x.streamedAt && x.endedAt ? x.endedAt - x.streamedAt : 0), 0);
+    samples.push({ at: Date.now(), tok_s: queue ? 0 : 30 + (tick % 8) * 3, queued: queue ? 2 : 0, hit: 0.6 + (tick % 10) * 0.03 });
+    if (samples.length > 120) samples.splice(0, samples.length - 120);
+    return {
+      server: { url: "http://demo:4000", reachable: true, reconnecting: false, version: "1.2.0", pid: 1234, lastError: null, lastProbeAt: Date.now() },
+      strata: {
+        url: "http://demo:8080", alive: true,
+        engine: { max_context: 32768, kv: "q8_0", prefill_cap: 2048 },
+        live: { state: queue ? "idle" : "generating", tok_s: queue ? 0 : 30 + (tick % 8) * 3, queued: queue ? 2 : 0, phase: "decode" },
+        hardware: { gpu_util: queue ? 20 : 65 + (tick % 5) * 4, gpu_mem_used: 6.2e9, gpu_mem_total: 8e9, gpu_temp: 56, gpu_power: 92 },
+        hardwareStatic: null,
+        history: { gpu_util: Array.from({ length: 24 }, (_, i) => 45 + ((i * 7 + tick) % 40)), gpu_mem_used: [] },
+        totals: { requests: 24, prompt_tokens: 90000, reused: 61000, output_tokens: 5200 },
+        cache: null, slots: [{ id: "slot0" }], status: { prompt_tokens: 9000 }, health: { model: "qwen-coder" },
+        lastError: null,
+        requests: [{ id: "r-demo", time: Date.now() / 1000, duration_s: 2.4, finish: "stop", prompt_tokens: 1400, reused: 1100, hit_rate: 0.78, decode_tok_s: 36, drafts_offered: 8, drafts_accepted: 5 }],
+        samples,
+      },
+      pending: approval ? { permissions: [{ id: "dp1", sessionID: "ses_demo", action: "edit", resources: ["src/demo.ts"], message: "" }], forms: [], shells: [] } : { permissions: [], forms: [], shells: [] },
+      sessions: [
+        {
+          id: "ses_demo", parentID: null, projectID: null, title: "Demo: refactor flow", agent: "build",
+          model: { id: "qwen-coder", providerID: "llamacpp" }, directory: "~/demo",
+          status: approval || queue ? "idle" : "running", outcome: null,
+          startedAt: t0, idleAt: null, lastEventAt: Date.now(), updatedAt: Date.now(),
+          tokens: { input: 12000, output: 2400 + tick * 6, cache: { read: 6000 } }, cost: 0.12,
+          compaction: null, retry: null, note: null, steps,
+          diagnosis: diag,
+          diagHistory: [
+            { key: "gen", at: t0 },
+            { key: "approval", at: t0 + 18000 },
+            { key: "gen", at: t0 + 23400 },
+            { key: "queue", at: t0 + 39600 },
+            { key: "gen", at: t0 + 45000 },
+          ].filter((x) => x.at <= t0 + cycle * 900),
+          time: { gen, tools: toolsMs, wait: approval ? 6000 : 6600, wall: cycle * 900 },
+        },
+      ],
+      events: [
+        { type: "session.step.started", at: Date.now() - 3000, sessionID: "ses_demo", summary: `step ${nsteps}` },
+        { type: "session.tool.success", at: Date.now() - 1500, sessionID: "ses_demo", summary: "edit" },
+        { type: "session.step.streamed", at: Date.now() - 800, sessionID: "ses_demo", summary: "" },
+      ],
+      stats: null,
+      updatedAt: Date.now(),
+    };
+  };
+  setInterval(() => {
+    tick++;
+    snap = mk();
+    pickSession();
+    render();
+  }, 900);
 }
 
 function renderPending() {

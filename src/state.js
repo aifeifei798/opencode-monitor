@@ -33,9 +33,11 @@ export function createStore() {
       health: null,
       lastError: null,
       lastAt: 0,
+      samples: [], // 每轮轮询采样：tok/s、排队数、缓存命中，供趋势小图
     },
     sessions: new Map(),
     pending: { permissions: [], forms: [], shells: [] },
+    pendingHistory: [], // 已解决的挂起请求：等了多久，供「时间去向」统计等待时长
     events: [],
     stats: null,
     updatedAt: 0,
@@ -61,6 +63,8 @@ function sessionOf(store, id, info) {
       idleAt: null,
       steps: [],
       stepSeq: 1, // step 编号独立递增：steps 会被 STEP_BUFFER 裁剪，不能用 length+1 当编号
+      diagHistory: [], // 诊断状态迁移记录（key + 时刻），供底部历史带
+      lastDiagKey: null,
       tools: new Map(),
       compaction: null,
       retry: null,
@@ -300,22 +304,28 @@ export function applyEvent(store, ev) {
       break;
     case "session.permission.asked":
     case "permission.asked":
-      if (s) store.pending.permissions.push({ id: d.id ?? d.requestID, sessionID: d.sessionID, action: d.action, resources: d.resources ?? [], message: d.metadata?.message ?? "" });
+      if (s) store.pending.permissions.push({ id: d.id ?? d.requestID, sessionID: d.sessionID, action: d.action, resources: d.resources ?? [], message: d.metadata?.message ?? "", firstSeenAt: now() });
       break;
     case "session.permission.replied":
-    case "permission.replied":
+    case "permission.replied": {
+      const gone = store.pending.permissions.find((p) => p.id === (d.id ?? d.requestID));
+      if (gone) pendingResolved(store, gone, "permission");
       store.pending.permissions = store.pending.permissions.filter((p) => p.id !== (d.id ?? d.requestID));
       break;
+    }
     case "session.form.created":
     case "form.created":
-      if (s) store.pending.forms.push({ id: d.id, sessionID: d.sessionID, title: d.title ?? d.info?.title ?? "" });
+      if (s) store.pending.forms.push({ id: d.id, sessionID: d.sessionID, title: d.title ?? d.info?.title ?? "", firstSeenAt: now() });
       break;
     case "session.form.replied":
     case "session.form.cancelled":
     case "form.replied":
-    case "form.cancelled":
+    case "form.cancelled": {
+      const gone = store.pending.forms.find((f) => f.id === d.id);
+      if (gone) pendingResolved(store, gone, "form");
       store.pending.forms = store.pending.forms.filter((f) => f.id !== d.id);
       break;
+    }
     default:
       break;
   }
@@ -368,6 +378,11 @@ export function setStrata(store, payload) {
   store.strata.lastError = payload.lastError ?? null;
   store.strata.lastAt = now();
   globalReqs = store.strata.requests;
+  // 轮询采样：供 GPU 面板的 tok/s / 排队 / 缓存命中趋势小图
+  if (payload.live) {
+    store.strata.samples.push({ at: now(), tok_s: payload.live.tok_s ?? 0, queued: payload.live.queued ?? 0, hit: store.strata.requests[0]?.hit_rate ?? null });
+    if (store.strata.samples.length > 120) store.strata.samples.splice(0, store.strata.samples.length - 120);
+  }
   for (const s of store.sessions.values()) for (const step of s.steps) if (!step.gpu) correlateGpu(s, step);
 }
 
@@ -383,9 +398,21 @@ export function setActive(store, activeMap) {
 }
 
 export function setPending(store, { permissions, forms, shells }) {
-  if (permissions) store.pending.permissions = permissions;
-  if (forms) store.pending.forms = forms;
+  if (permissions) store.pending.permissions = reconcilePending(store, store.pending.permissions, permissions, "permission");
+  if (forms) store.pending.forms = reconcilePending(store, store.pending.forms, forms, "form");
   if (shells) store.pending.shells = shells;
+}
+
+// 轮询列表与上一轮对比：消失的条目视为已解决，记下等待时长；保留首次出现时间
+function reconcilePending(store, prev, next, kind) {
+  const seen = new Map(prev.map((p) => [p.id, p.firstSeenAt ?? now()]));
+  for (const p of prev) if (!next.some((n) => n.id === p.id)) pendingResolved(store, p, kind);
+  return next.map((e) => ({ ...e, firstSeenAt: seen.get(e.id) ?? now() }));
+}
+
+function pendingResolved(store, e, kind) {
+  store.pendingHistory.push({ sessionID: e.sessionID ?? null, kind, id: e.id, startedAt: e.firstSeenAt ?? now(), endedAt: now() });
+  if (store.pendingHistory.length > 120) store.pendingHistory.splice(0, store.pendingHistory.length - 120);
 }
 
 export function setStats(store, stats) {
@@ -406,45 +433,47 @@ function diagnoseZh(store, session) {
   if (perms.length) {
     return {
       level: "blocked",
+      key: "approval",
       attention: "approval",
       headline: "在等你批准权限",
       reasons: perms.map((p) => `${p.action ?? "permission"}：${(p.resources ?? []).slice(0, 3).join(", ") || "（无资源列表）"}${p.message ? ` — ${p.message}` : ""}`),
     };
   }
   if (forms.length) {
-    return { level: "blocked", attention: "question", headline: "在等你回答问题", reasons: forms.map((f) => f.title || f.id) };
+    return { level: "blocked", key: "question", attention: "question", headline: "在等你回答问题", reasons: forms.map((f) => f.title || f.id) };
   }
   if (stalled.length) {
     return {
       level: "blocked",
+      key: "stalled",
       headline: `工具卡住：${stalled[0].name}`,
       reasons: [`${stalled[0].name} 已 ${Math.round((now() - stalled[0].startedAt) / 1000)} 秒没有任何进度事件`, stalled[0].inputText ? `参数：${stalled[0].inputText.slice(0, 140)}` : null].filter(Boolean),
     };
   }
   if (session.status === "error") {
-    return { level: "error", headline: "这一步失败了", reasons: [session.note ?? "未知错误"] };
+    return { level: "error", key: "error", headline: "这一步失败了", reasons: [session.note ?? "未知错误"] };
   }
   if (session.status === "interrupted") {
-    return { level: "blocked", headline: "被中断", reasons: ["你或客户端中断了这次执行"] };
+    return { level: "blocked", key: "interrupted", headline: "被中断", reasons: ["你或客户端中断了这次执行"] };
   }
   if (live.queued > 0) {
-    return { level: "blocked", headline: "在等 GPU：请求排队中", reasons: [`Strata 队列里有 ${live.queued} 个请求（只有 1 个 slot，并行调用会串行排队）`, live.phase ? `当前阶段：${live.phase}` : null].filter(Boolean) };
+    return { level: "blocked", key: "queue", headline: "在等 GPU：请求排队中", reasons: [`Strata 队列里有 ${live.queued} 个请求（只有 1 个 slot，并行调用会串行排队）`, live.phase ? `当前阶段：${live.phase}` : null].filter(Boolean) };
   }
   if (session.compaction?.status === "running") {
-    return { level: "blocked", headline: "正在压缩上下文", reasons: [`已生成 ${session.compaction.chars} 字符的摘要`] };
+    return { level: "blocked", key: "compaction", headline: "正在压缩上下文", reasons: [`已生成 ${session.compaction.chars} 字符的摘要`] };
   }
   if (session.retry) {
-    return { level: "blocked", headline: "provider 重试中", reasons: [`第 ${session.retry.attempt} 次重试${session.retry.error ? `：${session.retry.error}` : ""}`] };
+    return { level: "blocked", key: "retry", headline: "provider 重试中", reasons: [`第 ${session.retry.attempt} 次重试${session.retry.error ? `：${session.retry.error}` : ""}`] };
   }
   if (runningTools.length) {
     const t = runningTools[0];
     const secs = Math.round((now() - (t.calledAt ?? t.startedAt)) / 1000);
-    return { level: "running", headline: `正在跑工具：${t.name}`, reasons: [`已运行 ${secs} 秒`, t.metadata?.shellID ? "后台 shell 在跑" : null, live.state === "generating" ? `GPU 正在生成 ${live.generated ?? 0} tokens` : null].filter(Boolean) };
+    return { level: "running", key: "tool", headline: `正在跑工具：${t.name}`, reasons: [`已运行 ${secs} 秒`, t.metadata?.shellID ? "后台 shell 在跑" : null, live.state === "generating" ? `GPU 正在生成 ${live.generated ?? 0} tokens` : null].filter(Boolean) };
   }
   if (session.status === "running" || openStep) {
-    return { level: "running", headline: "正在生成", reasons: [live.state === "prefill" ? `GPU prefill：已读 ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}，${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "无生成"}`, openStep ? `第 ${openStep.index} 步` : null].filter(Boolean) };
+    return { level: "running", key: "gen", headline: "正在生成", reasons: [live.state === "prefill" ? `GPU prefill：已读 ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}，${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "无生成"}`, openStep ? `第 ${openStep.index} 步` : null].filter(Boolean) };
   }
-  return { level: "idle", headline: "空闲，等你输入", reasons: session.outcome ? [`上一次结果：${session.outcome}`] : [] };
+  return { level: "idle", key: "idle", headline: "空闲，等你输入", reasons: session.outcome ? [`上一次结果：${session.outcome}`] : [] };
 }
 
 // 同一优先级逻辑的英文镜像；前端按当前语言选用 headlineEn/reasonsEn（默认英文）
@@ -503,15 +532,38 @@ function diagnoseEn(store, session) {
 export function diagnose(store, session) {
   const zh = diagnoseZh(store, session);
   const en = diagnoseEn(store, session);
-  // attention（"approval"/"question"/undefined）随 zh 分支带出，供前端做标签闪烁与浏览器通知
+  // attention（"approval"/"question"/undefined）与 key（诊断类别）随 zh 分支带出，供前端闪烁通知与历史带翻译
   return { ...zh, headlineEn: en.headline, reasonsEn: en.reasons };
+}
+
+// 会话时间去向的近似归属：生成（started→streamed）、工具（streamed→ended）、等你（已解决挂起请求）。
+// steps 被 STEP_BUFFER 裁剪，只统计保留下来的 step，标注为近似值。
+function sessionTime(store, s) {
+  let gen = 0, tools = 0;
+  for (const st of s.steps) {
+    if (st.startedAt && st.streamedAt) gen += st.streamedAt - st.startedAt;
+    if (st.streamedAt && st.endedAt) tools += st.endedAt - st.streamedAt;
+  }
+  let wait = 0;
+  for (const h of store.pendingHistory) if (h.sessionID === s.id) wait += h.endedAt - h.startedAt;
+  const t0 = s.startedAt ?? s.steps[0]?.startedAt ?? null;
+  const wall = t0 ? (s.idleAt ?? s.lastEventAt ?? now()) - t0 : 0;
+  return { gen, tools, wait, wall };
 }
 
 export function snapshot(store) {
   const sessions = [...store.sessions.values()]
     .sort((a, b) => (b.status === "running" ? 1 : 0) - (a.status === "running" ? 1 : 0) || b.updatedAt - a.updatedAt)
     .slice(0, 24)
-    .map((s) => ({
+    .map((s) => {
+      const diag = diagnose(store, s);
+      // 诊断迁移记录：状态 key 变化时追加，供底部历史带
+      if (s.lastDiagKey !== diag.key) {
+        s.lastDiagKey = diag.key;
+        s.diagHistory.push({ key: diag.key, at: now() });
+        if (s.diagHistory.length > 40) s.diagHistory.splice(0, s.diagHistory.length - 40);
+      }
+      return {
       id: s.id,
       parentID: s.parentID,
       projectID: s.projectID,
@@ -558,8 +610,11 @@ export function snapshot(store) {
           lastProgressAt: t.lastProgressAt,
         })),
       })),
-      diagnosis: diagnose(store, s),
-    }));
+      diagnosis: diag,
+      diagHistory: s.diagHistory,
+      time: sessionTime(store, s),
+      };
+    });
 
   return {
     server: {
@@ -585,6 +640,7 @@ export function snapshot(store) {
       status: store.strata.status,
       health: store.strata.health,
       lastError: store.strata.lastError,
+      samples: store.strata.samples.slice(-120),
       requests: store.strata.requests.slice(0, 12).map((r) => ({ id: r.id, time: r.time, duration_s: r.duration_s, finish: r.finish, prompt_tokens: r.prompt_tokens, reused: r.reused, hit_rate: r.hit_rate, decode_tok_s: r.decode_tok_s, drafts_offered: r.drafts_offered, drafts_accepted: r.drafts_accepted })),
     },
     pending: store.pending,

@@ -52,6 +52,11 @@ const FIXTURE = {
     health: { model: "qwen-coder" },
     lastError: null,
     requests: [{ id: 1, time: now / 1000, duration_s: 3.5, finish: "tool-calls", prompt_tokens: 1200, reused: 900, hit_rate: 0.75, decode_tok_s: 74, drafts_offered: 10, drafts_accepted: 6 }],
+    samples: [
+      { at: now - 8000, tok_s: 30, queued: 1, hit: 0.6 },
+      { at: now - 6000, tok_s: 44, queued: 0, hit: 0.7 },
+      { at: now - 4000, tok_s: 52, queued: 2, hit: 0.75 },
+    ],
   },
   pending: {
     permissions: [{ id: "p1", sessionID: "s1", action: "edit", resources: ["src/state.js", "public/app.js"], message: "改两个文件" }],
@@ -165,7 +170,9 @@ const FIXTURE = {
           ],
         },
       ],
-      diagnosis: { level: "blocked", attention: "approval", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"], headlineEn: "Waiting for your approval", reasonsEn: ["edit: src/state.js, public/app.js — 改两个文件"] },
+      diagnosis: { level: "blocked", key: "approval", attention: "approval", headline: "在等你批准权限", reasons: ["edit：src/state.js, public/app.js — 改两个文件"], headlineEn: "Waiting for your approval", reasonsEn: ["edit: src/state.js, public/app.js — 改两个文件"] },
+      diagHistory: [{ key: "gen", at: now - 20000 }, { key: "approval", at: now - 12000 }, { key: "gen", at: now - 9000 }, { key: "approval", at: now - 3000 }],
+      time: { gen: 6000, tools: 4000, wait: 3000, wall: 20000 },
     },
     {
       id: "s2",
@@ -186,7 +193,7 @@ const FIXTURE = {
       retry: null,
       note: null,
       steps: [],
-      diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
+      diagnosis: { level: "idle", key: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
     },
     {
       id: "s3",
@@ -283,7 +290,9 @@ const FIXTURE = {
           tools: [],
         },
       ],
-      diagnosis: { level: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
+      diagnosis: { level: "idle", key: "idle", headline: "空闲，等你输入", reasons: ["上一次结果：succeeded"], headlineEn: "Idle, waiting for input", reasonsEn: ["last outcome: succeeded"] },
+      diagHistory: [{ key: "gen", at: now - 9000 }, { key: "idle", at: now - 4000 }],
+      time: { gen: 2400, tools: 2400, wait: 0, wall: 9000 },
     },
   ],
 };
@@ -329,6 +338,19 @@ fx.feed({ ...FIXTURE, sessions: FIXTURE.sessions.map((x) => (x.id === "s1" ? { .
 console.log("压缩完成隐藏节点:", !fdoc.querySelector('#pipeline g[data-key="compaction"]'));
 fx.feed(FIXTURE);
 console.log("压缩进行中重新显示:", !!fdoc.querySelector('#pipeline g[data-key="compaction"]'));
+
+// 底部新面板：时间去向 / 诊断历史带 / 会话行状态标签 / GPU 趋势小图
+console.log("时间去向堆叠条:", fdoc.getElementById("time-breakdown").innerHTML.includes("Generation") && fdoc.getElementById("time-breakdown").innerHTML.includes("Waiting for you"));
+console.log("诊断历史带:", fdoc.getElementById("diag-history").innerHTML.includes("Waiting for approval"));
+console.log("会话行诊断标签:", fdoc.querySelector('#sessions .row[data-id="s1"]').textContent.includes("Waiting for approval"));
+console.log("GPU 趋势小图:", fdoc.getElementById("gpu").innerHTML.includes("tok/s trend") && fdoc.getElementById("gpu").innerHTML.includes("queued trend"));
+
+// 帮助浮层：? 打开，Esc 关闭
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "?" }));
+console.log("? 打开帮助浮层:", !fdoc.getElementById("help").classList.contains("hidden") && fdoc.getElementById("help").textContent.includes("Shortcuts & legend"));
+fx.dom.window.dispatchEvent(new fx.dom.window.KeyboardEvent("keydown", { key: "Escape" }));
+console.log("Esc 关闭帮助浮层:", fdoc.getElementById("help").classList.contains("hidden"));
+console.log("导出按钮存在:", !!fdoc.getElementById("export-png-btn") && !!fdoc.getElementById("export-md-btn") && !fdoc.getElementById("export-md-btn").classList.contains("hidden"));
 
 // 溢出守卫：每行 tspan 的估算宽度必须落在节点矩形内
 const isWide = (ch) => /[\u2E80-\u9FFF\uFF01-\uFF60\u3000-\u303F\u{1F300}-\u{1F6FF}]/u.test(ch);
@@ -427,6 +449,12 @@ copied = "";
 allBtn?.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 await new Promise((r) => setTimeout(r, 50));
 console.log("复制全部含状态与参数全文:", copied.includes("Status") && copied.includes("npm test") && !copied.includes("Copy"));
+
+// 会话复制为 Markdown：含 step 标题、工具行、诊断标题
+copied = "";
+fdoc.getElementById("export-md-btn").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
+await new Promise((r) => setTimeout(r, 50));
+console.log("复制 Markdown 含 Step 与工具行:", copied.includes("Step #1") && copied.includes("- shell: running") && copied.includes("Waiting for your approval"));
 // 鼠标移进浮层：浮层应留在原地不消失
 fdoc.getElementById("pipeline").dispatchEvent(new fx.dom.window.MouseEvent("mouseleave", { bubbles: true }));
 tip.dispatchEvent(new fx.dom.window.MouseEvent("mouseenter", { bubbles: false }));
