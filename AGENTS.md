@@ -7,6 +7,8 @@ Local read-only web monitor: renders opencode's execution as a live flow diagram
 - `src/server.js` — zero-dependency node:http server: discovers opencode service port every 3s (password from `~/.config/opencode/service.json`, never sent to the browser), SSE `/api/stream` (`snap` events), `/api/snap`, `/api/health`.
 - `src/state.js` — pure state machine + diagnosis (`diagnoseZh`/`diagnoseEn` mirror pair; wrapper returns `headlineEn`/`reasonsEn`). Chinese logic is the source of truth; keep `diagnoseEn` in sync with `diagnoseZh`.
 - `public/app.js` — vanilla JS renderer (SVG flow diagram, i18n, theme). No framework, no bundling.
+- Root `index.html` — GitHub Pages redirect only: `location.replace("/public/index.html" + search)`, forwarding `?demo=1` / `?theme=…`. Pages source path can only be `/` or `/docs`, so the real UI stays in `public/`. Local server.js serves `public/` directly and ignores this file.
+- Demo mode: `?demo=1` skips EventSource and plays a scripted snapshot loop (`startDemo()` in app.js) — works on GitHub Pages with no backend: https://aifeifei798.github.io/opencode-monitor/?demo=1
 
 ## Commands
 
