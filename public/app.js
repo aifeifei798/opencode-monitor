@@ -624,6 +624,12 @@ function el(tag, attrs, cls) {
   return e;
 }
 
+// 连线末端箭头：颜色跟连线同色，箭头指向流向的终点（谁 → 谁）
+function edgeCls(e, cls) {
+  e.setAttribute("class", cls);
+  e.setAttribute("marker-end", cls.includes("edge-active") ? "url(#arr-active)" : cls.includes("edge-blocked") ? "url(#arr-blocked)" : cls.includes("edge-done") ? "url(#arr-done)" : "url(#arr)");
+}
+
 function ensure(map, key, parent, create) {
   let e = map.get(key);
   if (!e) {
@@ -733,6 +739,13 @@ function renderPipeline() {
     box.innerHTML = "";
     svg = el("svg", { xmlns: SVGNS }, "block");
     svg.dataset.session = selected ?? "";
+    const defs = el("defs", {}, "");
+    for (const [id, color] of [["arr", "#2a3743"], ["arr-active", "#38bdf8"], ["arr-blocked", "#f5b942"], ["arr-done", "#3f5160"]]) {
+      const m = el("marker", { id, viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" });
+      m.appendChild(el("path", { d: "M0 1.2 L7 4 L0 6.8 Z", fill: color }));
+      defs.appendChild(m);
+    }
+    svg.appendChild(defs);
     box.appendChild(svg);
     nodeEls.clear();
     edgeEls.clear();
@@ -772,13 +785,15 @@ function renderPipeline() {
     y += Math.max(r.h, CHIPS_TOP + r.chipsH) + ROW_GAP;
   }
 
-  const compGroups = s.compaction
+  // 压缩节点只在压缩进行中/失败时显示；完成后隐藏，不占用右侧展示
+  const compActive = s.compaction && s.compaction.status !== "done";
+  const compGroups = compActive
     ? [
         { cls: "t-title", lines: wrapText(tr("上下文压缩"), CHIP_INNER, TITLE_FS, 1) },
         {
           cls: "t-sub",
           lines: wrapText(
-            `${s.compaction.status === "running" ? tr("压缩中") : s.compaction.status === "failed" ? tr("失败") : tr("完成")} · ${fmtTok(s.compaction.chars)} ${lang === "zh" ? "字" : "chars"}`,
+            `${s.compaction.status === "running" ? tr("压缩中") : tr("失败")} · ${fmtTok(s.compaction.chars)} ${lang === "zh" ? "字" : "chars"}`,
             CHIP_INNER,
             SUB_FS,
             2
@@ -789,7 +804,7 @@ function renderPipeline() {
   const compH = compGroups.length ? nodeH(compGroups, LH_CH, 10, 10) : 0;
   const last = rows[rows.length - 1];
   const compY = last ? last.y + Math.max(last.h, CHIPS_TOP + last.chipsH) + 12 : userH + ROW_GAP;
-  const H = s.compaction ? Math.max(y, compY + compH + ROW_GAP) : y;
+  const H = compActive ? Math.max(y, compY + compH + ROW_GAP) : y;
   svg.setAttribute("width", CHIP_X + CHIP_W + 16);
   svg.setAttribute("height", H);
 
@@ -862,7 +877,7 @@ function renderPipeline() {
         "d",
         `M ${STEP_W} ${r.y + r.h / 2} C ${STEP_W + 34} ${r.y + r.h / 2}, ${CHIP_X - 30} ${cy + c.h / 2}, ${CHIP_X} ${cy + c.h / 2}`
       );
-      e.setAttribute("class", tool.status === "running" ? "edge edge-active" : tool.status === "error" ? "edge edge-blocked" : "edge edge-done");
+      edgeCls(e, tool.status === "running" ? "edge edge-active" : tool.status === "error" ? "edge edge-blocked" : "edge edge-done");
 
       // 工具 → 下一个 step（收敛回去）
       if (step.finish === "tool-calls" && rows[i + 1]) {
@@ -873,7 +888,7 @@ function renderPipeline() {
           "d",
           `M ${CHIP_X + CHIP_W} ${cy + c.h / 2} C ${CHIP_X + CHIP_W + 30} ${cy + c.h / 2}, ${STEP_W + 60} ${ny - 30}, ${STEP_W} ${ny}`
         );
-        e2.setAttribute("class", queued ? "edge edge-blocked" : rows[i + 1].step.endedAt ? "edge edge-done" : rows[i + 1].step.startedAt ? "edge edge-active" : "edge");
+        edgeCls(e2, queued ? "edge edge-blocked" : rows[i + 1].step.endedAt ? "edge edge-done" : rows[i + 1].step.startedAt ? "edge edge-active" : "edge");
       }
 
       cy += c.h + CHIP_GAP;
@@ -884,7 +899,7 @@ function renderPipeline() {
       usedEdge.add(`s:${step.messageID}`);
       const e = ensure(edgeEls, `s:${step.messageID}`, svg, () => el("path", {}, "edge"));
       e.setAttribute("d", `M ${STEP_W / 2} ${r.y + r.h} L ${STEP_W / 2} ${rows[i + 1].y}`);
-      e.setAttribute("class", queued ? "edge edge-blocked" : rows[i + 1].step.endedAt ? "edge edge-done" : rows[i + 1].step.startedAt ? "edge edge-active" : "edge");
+      edgeCls(e, queued ? "edge edge-blocked" : rows[i + 1].step.endedAt ? "edge edge-done" : rows[i + 1].step.startedAt ? "edge edge-active" : "edge");
     }
   });
 
@@ -892,10 +907,10 @@ function renderPipeline() {
   usedEdge.add("e:user");
   const first = ensure(edgeEls, "e:user", svg, () => el("path", {}, "edge"));
   first.setAttribute("d", `M ${STEP_W / 2} ${userH} L ${STEP_W / 2} ${rows.length ? rows[0].y : userH + ROW_GAP}`);
-  first.setAttribute("class", rows.length && !rows[0].step.endedAt ? "edge edge-active" : "edge edge-done");
+  edgeCls(first, rows.length && !rows[0].step.endedAt ? "edge edge-active" : "edge edge-done");
 
-  // 压缩节点：挂在最后一个 step 的工具列下方
-  if (s.compaction) {
+  // 压缩节点：挂在最后一个 step 的工具列下方（完成后隐藏）
+  if (compActive) {
     usedNode.add("compaction");
     const tone = s.compaction.status === "running" ? "node-running" : s.compaction.status === "failed" ? "node-error" : "node-done";
     const g = ensure(nodeEls, "compaction", svg, () => {

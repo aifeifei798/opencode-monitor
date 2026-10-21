@@ -200,6 +200,7 @@ const chipRects = rects.filter((r) => r.x > 0);
 console.log("fixture svg:", svg.getAttribute("width"), "x", svg.getAttribute("height"), "| nodes:", svg.querySelectorAll("g.node").length, "| edges:", svg.querySelectorAll("path.edge").length);
 console.log("steps stacked top-down:", stepRects.every((r, i) => i === 0 || r.y > stepRects[i - 1].y));
 console.log("chips on right column:", chipRects.every((r) => r.x === 334), "| chips:", chipRects.length);
+console.log("连线带方向箭头:", [...svg.querySelectorAll("path.edge")].every((p) => !!p.getAttribute("marker-end")));
 const lastStep = stepRects.at(-1);
 const chipRectsReal = [...svg.querySelectorAll("g.node")]
   .filter((g) => (g.getAttribute("data-key") ?? "").startsWith("chip:"))
@@ -222,6 +223,12 @@ const expectSmall = Math.max(0, Math.min(lastStep.y, Math.max(0, svgH - 70)));
 console.log("块放不下时贴顶对齐:", fbox.scrollTop === expectSmall, "| scrollTop:", fbox.scrollTop, "期望:", expectSmall);
 Object.defineProperty(fbox, "clientHeight", { value: 400, configurable: true });
 fx.feed(FIXTURE);
+
+// 压缩完成后节点隐藏，不再挤占右侧展示区
+fx.feed({ ...FIXTURE, sessions: FIXTURE.sessions.map((x) => (x.id === "s1" ? { ...x, compaction: { ...x.compaction, status: "done", endedAt: now } } : x)) });
+console.log("压缩完成隐藏节点:", !fdoc.querySelector('#pipeline g[data-key="compaction"]'));
+fx.feed(FIXTURE);
+console.log("压缩进行中重新显示:", !!fdoc.querySelector('#pipeline g[data-key="compaction"]'));
 
 // 溢出守卫：每行 tspan 的估算宽度必须落在节点矩形内
 const isWide = (ch) => /[\u2E80-\u9FFF\uFF01-\uFF60\u3000-\u303F\u{1F300}-\u{1F6FF}]/u.test(ch);
