@@ -251,9 +251,9 @@ console.log("text overflow lines:", overflow);
 console.log("长文本被折行成多行:", svg.querySelectorAll("g.node text tspan").length > svg.querySelectorAll("g.node text").length);
 
 // 语言切换：默认英文，点按钮切中文，再切回英文
-console.log("默认英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("lang-toggle").textContent === "中文");
+console.log("默认英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("lang-toggle").textContent === "文");
 fdoc.getElementById("lang-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
-console.log("切换中文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "会话树" && fdoc.getElementById("lang-toggle").textContent === "EN" && fdoc.getElementById("diag-headline").textContent === "在等你批准权限");
+console.log("切换中文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "会话树" && fdoc.getElementById("lang-toggle").textContent === "A" && fdoc.getElementById("diag-headline").textContent === "在等你批准权限");
 fdoc.getElementById("lang-toggle").dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 console.log("切回英文:", fdoc.querySelector('[data-i18n="Sessions"]').textContent === "Sessions" && fdoc.getElementById("diag-headline").textContent === "Waiting for your approval");
 

@@ -142,7 +142,7 @@ function applyI18n() {
     el.textContent = lang === "zh" ? (TD[en] ?? en) : en;
   });
   $("log-filter").placeholder = lang === "zh" ? (TD["filter event types…"] ?? "filter event types…") : "filter event types…";
-  $("lang-toggle").textContent = lang === "en" ? "中文" : "EN";
+  $("lang-toggle").textContent = lang === "en" ? "文" : "A";
 }
 
 let snap = null;
