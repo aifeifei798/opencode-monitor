@@ -15,9 +15,9 @@
 重新生成截图（需要服务在跑）：
 
 ```sh
-google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
+google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1800 \
   --screenshot=docs/screenshot-dark.png http://127.0.0.1:7788/
-google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1000 \
+google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1800 \
   --screenshot=docs/screenshot-light.png "http://127.0.0.1:7788/?theme=light"
 ```
 
