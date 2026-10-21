@@ -1,5 +1,7 @@
 # opencode live monitor
 
+**English** | [中文](README.zh.md)
+
 A local web page that draws opencode's execution as a live flow diagram and answers one question directly: **why is it stuck right now**.
 **Read-only**: it only reads opencode's API/event stream and Strata metrics; it never calls anything that changes opencode's state.
 
