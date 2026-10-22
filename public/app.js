@@ -123,8 +123,6 @@ const TE = {
   "重试": "Retries",
   "当前请求": "Current request",
   "opencode 直接调远端 API：没有本地 GPU/排队指标": "opencode calls the provider API directly — no local GPU/queue metrics",
-  "未连接 Strata": "Strata offline",
-  "当前会话走 opencode API": "this session uses the opencode API",
   // 等待面板
   "权限待批": "Permission pending",
   "等你回答": "Waiting for your answer",
@@ -774,11 +772,8 @@ function renderBanner() {
   const msgs = [];
   const backend = cur()?.backend ?? (snap.strata.alive ? "strata" : "api");
   if (snap.server.reconnecting || !snap.server.reachable) msgs.push(`${tr("opencode 服务未连通")}${sep()}${snap.server.lastError ?? tr("正在重新发现端口")}`);
-  if (!snap.strata.alive) {
-    // 走 opencode API 时 Strata 没连上是正常的，只提示一句
-    if (backend === "api") msgs.push(`${tr("未连接 Strata")}${sep()}${tr("当前会话走 opencode API")}`);
-    else msgs.push(`${tr("Strata 指标不可用")}${sep()}${snap.strata.lastError ?? tr("未启动")}`);
-  }
+  // 走 opencode API 时 Strata 没连上是正常状态，横幅不提示（面板里已经说明）
+  if (!snap.strata.alive && backend !== "api") msgs.push(`${tr("Strata 指标不可用")}${sep()}${snap.strata.lastError ?? tr("未启动")}`);
   b.classList.toggle("hidden", msgs.length === 0);
   b.textContent = msgs.join(" · ");
 }

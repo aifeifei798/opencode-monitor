@@ -525,6 +525,6 @@ console.log("api 模式面板标题:", adoc.getElementById("gpu-title").textCont
 console.log("api 面板有 provider 与地址:", agpu.includes("OpenCode") && agpu.includes("opencode.ai/inference/openai/v1"));
 console.log("api 面板有上次请求与费用:", agpu.includes("3.0s") && agpu.includes("$0.0123") && agpu.includes("$0.0456"));
 console.log("api 模式 chip 换成接口/上次请求/费用:", adoc.getElementById("chips").textContent.includes("Provider") && adoc.getElementById("chips").textContent.includes("Last request") && adoc.getElementById("chips").textContent.includes("Cost"));
-console.log("api 模式 banner 不报 Strata 不可用:", adoc.getElementById("banner").textContent.includes("Strata offline") && !adoc.getElementById("banner").textContent.includes("unavailable"));
+console.log("api 模式不再出 Strata 横幅:", adoc.getElementById("banner").classList.contains("hidden") && adoc.getElementById("banner").textContent === "");
 // 关掉这个 jsdom 窗口：里面的定时器（标题闪烁等）否则会让 node 一直不退出，CI 跑到超时
 adom.window.close();
