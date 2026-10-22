@@ -493,6 +493,9 @@ rb.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 console.log("再点停止回放:", fdoc.getElementById("replay-btn").textContent === "Replay" && fdoc.querySelectorAll("#pipeline g.node").length > 1);
 
 // ---- opencode API 模式：没连 Strata（或会话走远端 provider）时，右面板改显示 API 信息 ----
+// 关掉之前的 jsdom 窗口：标题闪烁等定时器留着会让 node 不退出，CI 直接跑到超时
+dom.window.close();
+fx.dom.window.close();
 const { dom: adom, feed: afeed } = load();
 const adoc = adom.window.document;
 const API_FIXTURE = {
@@ -504,6 +507,7 @@ const API_FIXTURE = {
       ...FIXTURE.sessions[0],
       model: { id: "minimax-m3.1-flash-free", providerID: "opencode", variant: "default" },
       backend: "api",
+      diagnosis: { level: "running", key: "gen", headline: "正在生成（opencode API）", reasons: ["模型 minimax-m3.1-flash-free"], headlineEn: "Generating (opencode API)", reasonsEn: ["model minimax-m3.1-flash-free"] },
       api: {
         provider: { id: "opencode", name: "OpenCode", baseURL: "https://opencode.ai/inference/openai/v1", local: false },
         model: { id: "minimax-m3.1-flash-free", providerID: "opencode" },
@@ -522,3 +526,5 @@ console.log("api 面板有 provider 与地址:", agpu.includes("OpenCode") && ag
 console.log("api 面板有上次请求与费用:", agpu.includes("3.0s") && agpu.includes("$0.0123") && agpu.includes("$0.0456"));
 console.log("api 模式 chip 换成接口/上次请求/费用:", adoc.getElementById("chips").textContent.includes("Provider") && adoc.getElementById("chips").textContent.includes("Last request") && adoc.getElementById("chips").textContent.includes("Cost"));
 console.log("api 模式 banner 不报 Strata 不可用:", adoc.getElementById("banner").textContent.includes("Strata offline") && !adoc.getElementById("banner").textContent.includes("unavailable"));
+// 关掉这个 jsdom 窗口：里面的定时器（标题闪烁等）否则会让 node 一直不退出，CI 跑到超时
+adom.window.close();
