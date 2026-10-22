@@ -506,6 +506,7 @@ const API_FIXTURE = {
     {
       ...FIXTURE.sessions[0],
       model: { id: "minimax-m3.1-flash-free", providerID: "opencode", variant: "default" },
+      tokens: { input: 1200000, output: 65714000, reasoning: 0, cache: { read: 63357000, write: 0 } },
       backend: "api",
       diagnosis: { level: "running", key: "gen", headline: "正在生成（opencode API）", reasons: ["模型 minimax-m3.1-flash-free"], headlineEn: "Generating (opencode API)", reasonsEn: ["model minimax-m3.1-flash-free"] },
       api: {
@@ -525,6 +526,10 @@ console.log("api 模式面板标题:", adoc.getElementById("gpu-title").textCont
 console.log("api 面板有 provider 与地址:", agpu.includes("OpenCode") && agpu.includes("opencode.ai/inference/openai/v1"));
 console.log("api 面板有上次请求与费用:", agpu.includes("3.0s") && agpu.includes("$0.0123") && agpu.includes("$0.0456"));
 console.log("api 模式 chip 换成接口/上次请求/费用:", adoc.getElementById("chips").textContent.includes("Provider") && adoc.getElementById("chips").textContent.includes("Last request") && adoc.getElementById("chips").textContent.includes("Cost"));
+// 上下文只看上一次请求的 prompt；会话累计量必须带「total」，大数用 M 缩写
+const achips = adoc.getElementById("chips").textContent;
+console.log("上下文按上次请求算:", achips.includes("context 9.2k"));
+console.log("累计量标明总计:", achips.includes("total output 65.7M") && achips.includes("total cache read 63.4M"));
 console.log("api 模式不再出 Strata 横幅:", adoc.getElementById("banner").classList.contains("hidden") && adoc.getElementById("banner").textContent === "");
 // 关掉这个 jsdom 窗口：里面的定时器（标题闪烁等）否则会让 node 一直不退出，CI 跑到超时
 adom.window.close();

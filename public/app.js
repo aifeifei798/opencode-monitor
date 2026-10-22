@@ -52,7 +52,6 @@ const TE = {
   "草稿接受": "draft accept",
   "运行中": "running",
   "会话": "sessions",
-  "生成": "output",
   // 浮层字段
   "状态": "Status",
   "时间": "Time",
@@ -122,6 +121,11 @@ const TE = {
   "费用": "Cost",
   "重试": "Retries",
   "当前请求": "Current request",
+  "累计输出": "total output",
+  "累计缓存读": "total cache read",
+  "上一次请求的 prompt 大小（输入 + 缓存读）": "prompt size of the last request (input + cache read)",
+  "本会话累计生成的 tokens": "tokens generated in this session so far",
+  "本会话累计从缓存读取的 tokens": "tokens read from cache in this session so far",
   "opencode 直接调远端 API：没有本地 GPU/排队指标": "opencode calls the provider API directly — no local GPU/queue metrics",
   // 等待面板
   "权限待批": "Permission pending",
@@ -352,8 +356,16 @@ function fmtDur(ms) {
 }
 function fmtTok(n) {
   if (n == null) return "—";
+  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return String(n);
+}
+// 上一次请求的 tokens：上下文大小按它算（会话累计量在 chip 上单独标「累计」）
+function lastTokens(s) {
+  if (!s) return null;
+  if (s.api?.last?.tokens) return s.api.last.tokens;
+  const st = [...(s.steps ?? [])].reverse().find((x) => x.tokens);
+  return st?.tokens ?? null;
 }
 function ago(t) {
   if (!t) return "—";
@@ -470,7 +482,7 @@ function userDetail(s) {
   const dh = dg ? (lang === "zh" ? dg.headline : dg.headlineEn ?? dg.headline) : "?";
   const dr = dg ? (lang === "zh" ? dg.reasons : dg.reasonsEn ?? dg.reasons) : [];
   rows.push(kv("诊断", `${dh}${dr?.length ? `${sep()}${dr.join(lang === "zh" ? "；" : "; ")}` : ""}`));
-  if (s.tokens) rows.push(kv("tokens", `${tr("输入")} ${fmtTok(s.tokens.input)} · ${tr("输出")} ${fmtTok(s.tokens.output)} · ${tr("缓存读")} ${fmtTok(s.tokens.cache?.read ?? 0)}`));
+  if (s.tokens) rows.push(kv(lang === "zh" ? "tokens（累计）" : "tokens (total)", `${tr("输入")} ${fmtTok(s.tokens.input)} · ${tr("输出")} ${fmtTok(s.tokens.output)} · ${tr("缓存读")} ${fmtTok(s.tokens.cache?.read ?? 0)}`));
   rows.push(kv("步数", lang === "zh" ? `${s.steps.length} 个 step` : `${s.steps.length} steps`));
   rows.push(`<div class="tip-hint">${tr("鼠标可直接移进浮层滚动、选文字；单击可钉住，再点空白处关闭")}</div>`);
   return rows.join("");
@@ -710,8 +722,8 @@ function nodeH(groups, lh, top = 12, bottom = 12) {
   return top + Math.max(1, lines) * lh + bottom;
 }
 
-function chip(label, value, tone = "text-ink") {
-  return `<span class="rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono ${tone}">${tr(label)} <b class="font-semibold">${value}</b></span>`;
+function chip(label, value, tone = "text-ink", title = null) {
+  return `<span${title ? ` title="${title}"` : ""} class="rounded border border-line bg-panel-2 px-2 py-1 text-xs font-mono ${tone}">${tr(label)} <b class="font-semibold">${value}</b></span>`;
 }
 
 function render() {
@@ -739,27 +751,34 @@ function renderHeader() {
   dot.className = `dot ${s.reachable ? "dot-running" : "dot-error"}`;
   $("svc-meta").textContent = `${s.url ?? tr("未发现服务")} · v${s.version ?? "?"} · pid ${s.pid ?? "?"} · ${tr("会话")} ${snap.sessions.length}`;
 
-  const t = cur()?.tokens ?? {};
+  const cs = cur();
+  const t = cs?.tokens ?? {};
   const live = snap.strata.live ?? {};
-  const backend = cur()?.backend ?? (snap.strata.alive ? "strata" : "api");
-  const api = cur()?.api ?? null;
+  const backend = cs?.backend ?? (snap.strata.alive ? "strata" : "api");
+  const api = cs?.api ?? null;
+  // 「上下文」只看上一次请求的 prompt（输入 + 缓存读）；会话累计量单独标成「累计」，别混在一起
+  const lt = lastTokens(cs);
+  const ctx = lt ? (lt.input ?? 0) + (lt.cache?.read ?? 0) : null;
+  const ctxTitle = tr("上一次请求的 prompt 大小（输入 + 缓存读）");
+  const outTitle = tr("本会话累计生成的 tokens");
+  const cacheTitle = tr("本会话累计从缓存读取的 tokens");
   // 两种模式都保持 7 个 chip，避免切换后布局跳动
   const chips =
     backend === "api"
       ? [
-          chip("模型", `${cur()?.model?.id ?? "?"}/${cur()?.model?.providerID ?? "?"}`),
-          chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
-          chip("生成", fmtTok(t.output ?? 0)),
-          chip("缓存读", fmtTok(t.cache?.read ?? 0)),
-          chip("接口", api?.provider?.name ?? cur()?.model?.providerID ?? "—", "text-gpu"),
+          chip("模型", `${cs?.model?.id ?? "?"}/${cs?.model?.providerID ?? "?"}`),
+          chip("上下文", ctx != null ? fmtTok(ctx) : "—", "text-ink", ctxTitle),
+          chip("累计输出", fmtTok(t.output ?? 0), "text-ink", outTitle),
+          chip("累计缓存读", fmtTok(t.cache?.read ?? 0), "text-ink", cacheTitle),
+          chip("接口", api?.provider?.name ?? cs?.model?.providerID ?? "—", "text-gpu"),
           chip("上次请求", api?.last ? fmtDur(api.last.durationMs) : "—"),
           chip("费用", api?.totals?.cost ? `$${Number(api.totals.cost).toFixed(4)}` : "—"),
         ]
       : [
-          chip("模型", `${cur()?.model?.id ?? snap.strata.health?.model ?? "?"}/${cur()?.model?.providerID ?? "?"}`),
-          chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
-          chip("生成", fmtTok(t.output ?? 0)),
-          chip("缓存读", fmtTok(t.cache?.read ?? 0)),
+          chip("模型", `${cs?.model?.id ?? snap.strata.health?.model ?? "?"}/${cs?.model?.providerID ?? "?"}`),
+          chip("上下文", ctx != null ? fmtTok(ctx) : "—", "text-ink", ctxTitle),
+          chip("累计输出", fmtTok(t.output ?? 0), "text-ink", outTitle),
+          chip("累计缓存读", fmtTok(t.cache?.read ?? 0), "text-ink", cacheTitle),
           chip("GPU", live.state ?? tr("离线"), live.state ? "text-gpu" : "text-error"),
           chip("tok/s", live.tok_s ? Math.round(live.tok_s) : "—", "text-gpu"),
           chip("排队", live.queued ?? 0, live.queued > 0 ? "text-blocked" : "text-ink-dim"),
