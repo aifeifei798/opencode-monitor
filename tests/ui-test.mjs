@@ -309,6 +309,10 @@ const chipRects = rects.filter((r) => r.x > 0);
 console.log("fixture svg:", svg.getAttribute("width"), "x", svg.getAttribute("height"), "| nodes:", svg.querySelectorAll("g.node").length, "| edges:", svg.querySelectorAll("path.edge").length);
 console.log("steps stacked top-down:", stepRects.every((r, i) => i === 0 || r.y > stepRects[i - 1].y));
 console.log("chips on right column:", chipRects.every((r) => r.x === 334), "| chips:", chipRects.length);
+// 画布高度要覆盖到最下面那个工具块（否则最后一行右侧的框会被底边裁掉）
+const maxB = Math.max(...rects.map((r) => r.y + r.h));
+const maxR = Math.max(...rects.map((r) => r.x + r.w));
+console.log("所有节点都在画布内:", maxB <= +svg.getAttribute("height") && maxR <= +svg.getAttribute("width"), "| bottom:", maxB, "svgH:", svg.getAttribute("height"));
 console.log("连线带方向箭头:", [...svg.querySelectorAll("path.edge")].every((p) => !!p.getAttribute("marker-end")));
 const lastStep = stepRects.at(-1);
 const chipRectsReal = [...svg.querySelectorAll("g.node")]

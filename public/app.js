@@ -1029,10 +1029,13 @@ function renderPipeline() {
   });
 
   let y = userH + ROW_GAP;
+  // 一行占的高度：step 节点 +（有工具时）右侧工具块整列的竖向堆叠。
+  // 工具块是从 step 节点下方开始排的，所以不能只取 max(step, 工具块)，否则最后一行会被画布底边裁掉。
+  const rowBlockH = (r) => r.h + (r.chipsH ? CHIPS_TOP + r.chipsH : 0);
   for (const r of rows) {
     r.y = y;
     r.chipY0 = r.y + r.h + CHIPS_TOP;
-    y += Math.max(r.h, CHIPS_TOP + r.chipsH) + ROW_GAP;
+    y += rowBlockH(r) + ROW_GAP;
   }
 
   // 压缩节点只在压缩进行中/失败时显示；完成后隐藏，不占用右侧展示
@@ -1056,7 +1059,7 @@ function renderPipeline() {
     : [];
   const compH = compGroups.length ? nodeH(compGroups, LH_CH, 10, 10) : 0;
   const last = rows[rows.length - 1];
-  const compY = last ? last.y + Math.max(last.h, CHIPS_TOP + last.chipsH) + 12 : userH + ROW_GAP;
+  const compY = last ? last.y + rowBlockH(last) + 12 : userH + ROW_GAP;
   const H = compActive ? Math.max(y, compY + compH + ROW_GAP) : y;
   svg.setAttribute("width", CHIP_X + CHIP_W + 16);
   svg.setAttribute("height", H);
@@ -1191,7 +1194,7 @@ function renderPipeline() {
   const openRows = rows.filter((r) => !r.step.endedAt);
   const curRow = openRows[openRows.length - 1] ?? rows[rows.length - 1];
   if (view && curRow && Date.now() >= manualScrollUntil) {
-    const blockH = Math.max(curRow.h, CHIPS_TOP + curRow.chipsH);
+    const blockH = rowBlockH(curRow);
     // 整块放得下就居中；放不下就把块顶贴到视野顶，保证块底不被裁掉
     const base = blockH > view ? curRow.y : curRow.y + blockH / 2 - view / 2;
     const top = Math.max(0, Math.min(base, Math.max(0, H - view)));
