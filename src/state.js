@@ -41,6 +41,10 @@ export function createStore() {
     events: [],
     stats: null,
     updatedAt: 0,
+    opencode: {
+      providers: [], // opencode 已配置的 provider：{id,name,baseURL,local}，local=走本机（Strata）
+      providersAt: 0,
+    },
   };
 }
 
@@ -390,6 +394,71 @@ export function setSessions(store, infos) {
   for (const info of infos) sessionOf(store, info.id, info);
 }
 
+// —— provider / 后端判定 ——
+// opencode 既可以走本机 Strata（llama.cpp），也可以直接用 opencode 自己的 API（远端 provider）。
+// 面板要按「这个会话实际在用什么后端」来显示：本地就显示 GPU 指标，远端就显示 opencode API 信息。
+const LOCAL_HOST_RE = /^(127\.0\.0\.1|localhost|0\.0\.0\.0|::1|\[::1\])$/;
+const LOCAL_ID_RE = /llama|local|strata|ollama/i;
+
+export function setProviders(store, list) {
+  const out = [];
+  for (const p of list ?? []) {
+    const baseURL = p?.settings?.baseURL ?? p?.baseURL ?? null;
+    let host = null;
+    if (baseURL) {
+      try {
+        host = new URL(baseURL).hostname;
+      } catch {
+        host = null;
+      }
+    }
+    const id = p?.id ?? "";
+    out.push({ id, name: p?.name ?? id, baseURL, local: host ? LOCAL_HOST_RE.test(host) : LOCAL_ID_RE.test(id), package: p?.package ?? null });
+  }
+  store.opencode.providers = out;
+  store.opencode.providersAt = now();
+}
+
+function providerOf(store, id) {
+  if (!id) return null;
+  return store.opencode.providers.find((p) => p.id === id) ?? null;
+}
+
+// 后端：strata = 本机 Strata/GPU；api = opencode 直接调远端 provider 的 API
+export function backendOf(store, session) {
+  const pid = session?.model?.providerID ?? session?.steps?.findLast?.((x) => x?.model?.providerID)?.model?.providerID ?? null;
+  if (!pid) return store.strata.alive ? "strata" : "api";
+  const p = providerOf(store, pid);
+  if (p) return p.local ? "strata" : "api";
+  return LOCAL_ID_RE.test(pid) ? "strata" : "api";
+}
+
+// opencode API 视角的会话信息：provider、上一次请求、累计 tokens/费用、重试
+export function apiStats(store, session) {
+  const steps = session?.steps ?? [];
+  const last = [...steps].reverse().find((x) => x.endedAt) ?? null;
+  const open = steps.find((x) => !x.endedAt) ?? null;
+  const provider = providerOf(store, session?.model?.providerID);
+  return {
+    provider: provider ? { id: provider.id, name: provider.name, baseURL: provider.baseURL, local: provider.local } : null,
+    model: session?.model ?? null,
+    last: last
+      ? {
+          index: last.index,
+          startedAt: last.startedAt,
+          endedAt: last.endedAt,
+          durationMs: (last.endedAt ?? 0) - (last.startedAt ?? last.endedAt),
+          finish: last.finish ?? null,
+          tokens: last.tokens ?? null,
+          cost: last.cost ?? 0,
+        }
+      : null,
+    open: open ? { index: open.index, startedAt: open.startedAt, elapsedMs: now() - (open.startedAt ?? now()) } : null,
+    totals: { tokens: session?.tokens ?? null, cost: session?.cost ?? 0 },
+    retry: session?.retry ?? null,
+  };
+}
+
 export function setActive(store, activeMap) {
   for (const [id, a] of Object.entries(activeMap ?? {})) {
     const s = sessionOf(store, id);
@@ -429,6 +498,7 @@ function diagnoseZh(store, session) {
   const runningTools = running ? [...session.tools.values()].filter((t) => t.status === "running") : [];
   const openStep = running ? session.steps.find((x) => !x.endedAt) : null;
   const stalled = runningTools.filter((t) => now() - t.lastProgressAt > 20000);
+  const local = backendOf(store, session) === "strata"; // 走远端 provider 时没有 GPU/排队指标
 
   if (perms.length) {
     return {
@@ -456,7 +526,7 @@ function diagnoseZh(store, session) {
   if (session.status === "interrupted") {
     return { level: "blocked", key: "interrupted", headline: "被中断", reasons: ["你或客户端中断了这次执行"] };
   }
-  if (live.queued > 0) {
+  if (local && live.queued > 0) {
     return { level: "blocked", key: "queue", headline: "在等 GPU：请求排队中", reasons: [`Strata 队列里有 ${live.queued} 个请求（只有 1 个 slot，并行调用会串行排队）`, live.phase ? `当前阶段：${live.phase}` : null].filter(Boolean) };
   }
   if (session.compaction?.status === "running") {
@@ -468,9 +538,23 @@ function diagnoseZh(store, session) {
   if (runningTools.length) {
     const t = runningTools[0];
     const secs = Math.round((now() - (t.calledAt ?? t.startedAt)) / 1000);
-    return { level: "running", key: "tool", headline: `正在跑工具：${t.name}`, reasons: [`已运行 ${secs} 秒`, t.metadata?.shellID ? "后台 shell 在跑" : null, live.state === "generating" ? `GPU 正在生成 ${live.generated ?? 0} tokens` : null].filter(Boolean) };
+    return { level: "running", key: "tool", headline: `正在跑工具：${t.name}`, reasons: [`已运行 ${secs} 秒`, t.metadata?.shellID ? "后台 shell 在跑" : null, local && live.state === "generating" ? `GPU 正在生成 ${live.generated ?? 0} tokens` : null].filter(Boolean) };
   }
   if (session.status === "running" || openStep) {
+    if (!local) {
+      const api = apiStats(store, session);
+      const model = session.model?.id ? `${session.model.id}${session.model.providerID ? ` (${session.model.providerID})` : ""}` : null;
+      return {
+        level: "running",
+        key: "gen",
+        headline: "正在生成（opencode API）",
+        reasons: [
+          model ? `模型 ${model}` : null,
+          api.last ? `上次请求 ${(api.last.durationMs / 1000).toFixed(1)}s${api.last.finish ? ` · ${api.last.finish}` : ""}${api.last.tokens ? ` · 输出 ${api.last.tokens.output ?? 0} tokens` : ""}` : null,
+          api.open ? `第 ${api.open.index} 步已跑 ${Math.round(api.open.elapsedMs / 1000)} 秒` : null,
+        ].filter(Boolean),
+      };
+    }
     return { level: "running", key: "gen", headline: "正在生成", reasons: [live.state === "prefill" ? `GPU prefill：已读 ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}，${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "无生成"}`, openStep ? `第 ${openStep.index} 步` : null].filter(Boolean) };
   }
   return { level: "idle", key: "idle", headline: "空闲，等你输入", reasons: session.outcome ? [`上一次结果：${session.outcome}`] : [] };
@@ -485,6 +569,7 @@ function diagnoseEn(store, session) {
   const runningTools = running ? [...session.tools.values()].filter((t) => t.status === "running") : [];
   const openStep = running ? session.steps.find((x) => !x.endedAt) : null;
   const stalled = runningTools.filter((t) => now() - t.lastProgressAt > 20000);
+  const local = backendOf(store, session) === "strata"; // remote provider → no GPU/queue metrics
 
   if (perms.length) {
     return {
@@ -509,7 +594,7 @@ function diagnoseEn(store, session) {
   if (session.status === "interrupted") {
     return { level: "blocked", headline: "Interrupted", reasons: ["you or the client interrupted this run"] };
   }
-  if (live.queued > 0) {
+  if (local && live.queued > 0) {
     return { level: "blocked", headline: "Waiting for GPU: request queued", reasons: [`Strata queue has ${live.queued} request(s) (only 1 slot — parallel calls queue serially)`, live.phase ? `current phase: ${live.phase}` : null].filter(Boolean) };
   }
   if (session.compaction?.status === "running") {
@@ -521,9 +606,22 @@ function diagnoseEn(store, session) {
   if (runningTools.length) {
     const t = runningTools[0];
     const secs = Math.round((now() - (t.calledAt ?? t.startedAt)) / 1000);
-    return { level: "running", headline: `Running tool: ${t.name}`, reasons: [`running for ${secs}s`, t.metadata?.shellID ? "background shell running" : null, live.state === "generating" ? `GPU generating ${live.generated ?? 0} tokens` : null].filter(Boolean) };
+    return { level: "running", headline: `Running tool: ${t.name}`, reasons: [`running for ${secs}s`, t.metadata?.shellID ? "background shell running" : null, local && live.state === "generating" ? `GPU generating ${live.generated ?? 0} tokens` : null].filter(Boolean) };
   }
   if (session.status === "running" || openStep) {
+    if (!local) {
+      const api = apiStats(store, session);
+      const model = session.model?.id ? `${session.model.id}${session.model.providerID ? ` (${session.model.providerID})` : ""}` : null;
+      return {
+        level: "running",
+        headline: "Generating (opencode API)",
+        reasons: [
+          model ? `model ${model}` : null,
+          api.last ? `last request ${(api.last.durationMs / 1000).toFixed(1)}s${api.last.finish ? ` · ${api.last.finish}` : ""}${api.last.tokens ? ` · ${api.last.tokens.output ?? 0} output tokens` : ""}` : null,
+          api.open ? `step ${api.open.index} running for ${Math.round(api.open.elapsedMs / 1000)}s` : null,
+        ].filter(Boolean),
+      };
+    }
     return { level: "running", headline: "Generating", reasons: [live.state === "prefill" ? `GPU prefill: read ${live.prompt_read ?? 0}/${live.prompt_total ?? 0} tokens` : `GPU ${live.state ?? "idle"}, ${live.tok_s ? `${Math.round(live.tok_s)} tok/s` : "no generation"}`, openStep ? `step ${openStep.index}` : null].filter(Boolean) };
   }
   return { level: "idle", headline: "Idle, waiting for input", reasons: session.outcome ? [`last outcome: ${session.outcome}`] : [] };
@@ -613,6 +711,8 @@ export function snapshot(store) {
       diagnosis: diag,
       diagHistory: s.diagHistory,
       time: sessionTime(store, s),
+      backend: backendOf(store, s),
+      api: apiStats(store, s),
       };
     });
 
@@ -644,6 +744,7 @@ export function snapshot(store) {
       requests: store.strata.requests.slice(0, 12).map((r) => ({ id: r.id, time: r.time, duration_s: r.duration_s, finish: r.finish, prompt_tokens: r.prompt_tokens, reused: r.reused, hit_rate: r.hit_rate, decode_tok_s: r.decode_tok_s, drafts_offered: r.drafts_offered, drafts_accepted: r.drafts_accepted })),
     },
     pending: store.pending,
+    providers: store.opencode.providers,
     sessions,
     events: store.events.slice(-120),
     stats: store.stats,

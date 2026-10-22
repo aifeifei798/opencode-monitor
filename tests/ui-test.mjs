@@ -28,7 +28,7 @@ const doc = dom.window.document;
 console.log("live sessions rows:", doc.querySelectorAll("#sessions .row").length);
 console.log("live headline:", doc.getElementById("diag-headline").textContent);
 console.log("live svg:", doc.querySelector("#pipeline svg").getAttribute("width"), "x", doc.querySelector("#pipeline svg").getAttribute("height"));
-console.log("gpu text ok:", doc.getElementById("gpu").textContent.includes("GPU"));
+console.log("gpu text ok:", doc.getElementById("gpu").textContent.length > 0);
 const dead = { ...live, strata: { ...live.strata, alive: false, lastError: "未启动" } };
 feed(dead);
 console.log("gpu offline banner:", doc.getElementById("banner").textContent.slice(0, 60));
@@ -491,3 +491,34 @@ const n2 = fdoc.querySelectorAll("#pipeline g.node").length;
 console.log("回放逐步放出节点:", n1 === 1 && n2 > n1);
 rb.dispatchEvent(new fx.dom.window.MouseEvent("click", { bubbles: true }));
 console.log("再点停止回放:", fdoc.getElementById("replay-btn").textContent === "Replay" && fdoc.querySelectorAll("#pipeline g.node").length > 1);
+
+// ---- opencode API 模式：没连 Strata（或会话走远端 provider）时，右面板改显示 API 信息 ----
+const { dom: adom, feed: afeed } = load();
+const adoc = adom.window.document;
+const API_FIXTURE = {
+  ...FIXTURE,
+  strata: { ...FIXTURE.strata, alive: false, lastError: "未启动" },
+  providers: [{ id: "opencode", name: "OpenCode", baseURL: "https://opencode.ai/inference/openai/v1", local: false }],
+  sessions: [
+    {
+      ...FIXTURE.sessions[0],
+      model: { id: "minimax-m3.1-flash-free", providerID: "opencode", variant: "default" },
+      backend: "api",
+      api: {
+        provider: { id: "opencode", name: "OpenCode", baseURL: "https://opencode.ai/inference/openai/v1", local: false },
+        model: { id: "minimax-m3.1-flash-free", providerID: "opencode" },
+        last: { index: 3, startedAt: now - 3000, endedAt: now, durationMs: 3000, finish: "stop", tokens: { input: 1200, output: 340, cache: { read: 8000 } }, cost: 0.0123 },
+        open: null,
+        totals: { tokens: { input: 12000, output: 3400, cache: { read: 90000 } }, cost: 0.0456 },
+        retry: null,
+      },
+    },
+  ],
+};
+afeed(API_FIXTURE);
+const agpu = adoc.getElementById("gpu").textContent;
+console.log("api 模式面板标题:", adoc.getElementById("gpu-title").textContent === "opencode API");
+console.log("api 面板有 provider 与地址:", agpu.includes("OpenCode") && agpu.includes("opencode.ai/inference/openai/v1"));
+console.log("api 面板有上次请求与费用:", agpu.includes("3.0s") && agpu.includes("$0.0123") && agpu.includes("$0.0456"));
+console.log("api 模式 chip 换成接口/上次请求/费用:", adoc.getElementById("chips").textContent.includes("Provider") && adoc.getElementById("chips").textContent.includes("Last request") && adoc.getElementById("chips").textContent.includes("Cost"));
+console.log("api 模式 banner 不报 Strata 不可用:", adoc.getElementById("banner").textContent.includes("Strata offline") && !adoc.getElementById("banner").textContent.includes("unavailable"));

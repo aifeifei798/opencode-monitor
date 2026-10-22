@@ -1,5 +1,5 @@
 // 状态机与诊断逻辑测试（纯内存，不碰 opencode）
-import { createStore, applyEvent, setPending, setStrata, diagnose, snapshot } from "../src/state.js";
+import { createStore, applyEvent, setPending, setStrata, setProviders, diagnose, snapshot } from "../src/state.js";
 
 const store = createStore();
 const sid = "ses_test";
@@ -88,3 +88,26 @@ setStrata(store3, { alive: true, live: { tok_s: 42, queued: 2 }, requests: [{ hi
 setStrata(store3, { alive: true, live: { tok_s: 30, queued: 0 }, requests: [] });
 const strataSnap = snapshot(store3).strata;
 console.log("strata samples for trends:", strataSnap.samples.length === 2 && strataSnap.samples[0].tok_s === 42 && strataSnap.samples[1].queued === 0);
+
+// provider / 后端判定：本机 provider → Strata；远端 provider → opencode API
+const store4 = createStore();
+setProviders(store4, [
+  { id: "llamacpp", name: "llama.cpp (Local)", settings: { baseURL: "http://127.0.0.1:8080/v1" } },
+  { id: "opencode", name: "OpenCode", settings: { baseURL: "https://opencode.ai/inference/openai/v1" } },
+]);
+applyEvent(store4, { type: "session.created", data: { sessionID: "ses_api", info: { id: "ses_api", title: "api", model: { id: "m3", providerID: "opencode" } } } });
+applyEvent(store4, { type: "session.created", data: { sessionID: "ses_loc", info: { id: "ses_loc", title: "local", model: { id: "qwen-coder", providerID: "llamacpp" } } } });
+applyEvent(store4, { type: "session.execution.started", data: { sessionID: "ses_api", started: Date.now() } });
+applyEvent(store4, { type: "session.step.started", data: { sessionID: "ses_api", assistantMessageID: "ma" } });
+applyEvent(store4, { type: "session.step.ended", data: { sessionID: "ses_api", assistantMessageID: "ma", finish: "stop", tokens: { input: 100, output: 20, cache: { read: 50 } }, cost: 0.5 } });
+const s4 = snapshot(store4);
+const apiS = s4.sessions.find((x) => x.id === "ses_api");
+const locS = s4.sessions.find((x) => x.id === "ses_loc");
+console.log("remote provider → api backend:", apiS.backend === "api" && locS.backend === "strata");
+console.log("api provider info:", apiS.api.provider?.id === "opencode" && apiS.api.provider.local === false && apiS.api.provider.baseURL.includes("opencode.ai"));
+console.log("api last request:", apiS.api.last?.finish === "stop" && apiS.api.last.tokens.output === 20 && apiS.api.last.cost === 0.5);
+console.log("api diagnosis:", diagnose(store4, store4.sessions.get("ses_api")).headline === "正在生成（opencode API）" && diagnose(store4, store4.sessions.get("ses_api")).headlineEn === "Generating (opencode API)");
+// Strata 在排队也不该把远端会话判成 GPU 排队
+setStrata(store4, { alive: true, live: { state: "generating", queued: 3 }, requests: [] });
+console.log("api session ignores GPU queue:", diagnose(store4, store4.sessions.get("ses_api")).key !== "queue");
+console.log("local session still reports GPU queue:", diagnose(store4, store4.sessions.get("ses_loc")).key === "queue");

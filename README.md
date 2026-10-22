@@ -53,6 +53,7 @@ npm run build               # styles/input.css → public/tailwind.css
 - **opencode service**: password read from `~/.config/opencode/service.json`; the port is re-discovered every 3 seconds via `opencode service status` (auto-reconnects when the service restarts on a new port).
 - **Event stream**: `GET /api/event` (SSE). Mapped: `session.execution.*`, `session.step.*`, `session.reasoning.*`, `session.tool.input.*` / `called` / `progress` / `success`, `session.compaction.*`, `session.usage.updated`, `session.created/deleted` (subagent tree).
 - **Fallback polling** (3 s): `/api/session`, `/api/session/active`, `/api/permission/request`, `/api/form`, `/api/shell`.
+- **Provider list** (30 s): `/api/provider` — which backend each session actually uses. A provider whose `baseURL` points at `127.0.0.1` is local (Strata); everything else is a remote provider reached through opencode's own API.
 - **Strata GPU** (2 s): `/metrics`, `/status`, `/slots`, `/api/health` on `http://127.0.0.1:8080`.
 
 ## What's on the page
@@ -62,6 +63,7 @@ npm run build               # styles/input.css → public/tailwind.css
 - **Session tree**: main session and subagent branches indented by `parentID`, colored by status; each row shows the session's current diagnosis state (waiting for approval / GPU queued / generating / idle …).
 - **Timeline**: per-Step duration bars, split into prefill/decode segments.
 - **Strata panel**: GPU util, VRAM, temperature, power, tok/s, queued count, KV hit rate, draft accept rate, context usage, util sparkline, plus tok/s / queued / cache-hit trend sparklines from the monitor's own samples.
+- **opencode API panel**: when Strata is not connected — or the selected session runs on a remote provider — that same panel switches to the opencode API view: provider name, endpoint, model, last request (step, duration, finish reason), last usage (in / out / cache read), last & total cost, retries, and the in-flight request. The header chips follow suit (Provider / Last request / Cost instead of GPU / tok/s / queued), and the diagnosis no longer blames a GPU queue that this session never used.
 - **Where the time went**: a stacked bar splitting wall-clock time into generation / tool exec / waiting for you (resolved approvals & questions) / other (queue etc.) — approximate, covering the retained step buffer.
 - **Diagnosis history**: a colored band showing every diagnosis transition (generating → waiting for approval → GPU queued …) with per-state durations.
 - **Waiting / event stream**: pending permissions, unanswered questions, running shells; filterable event log.

@@ -4,7 +4,7 @@ import os from "node:os";
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createStore, applyEvent, setSessions, setActive, setPending, setStrata, setStats, snapshot } from "./state.js";
+import { createStore, applyEvent, setSessions, setActive, setPending, setStrata, setStats, setProviders, snapshot } from "./state.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -158,6 +158,16 @@ async function pollOpencode() {
   }
 }
 
+async function pollProviders() {
+  if (!store.server.url || !store.server.password) return;
+  try {
+    const res = await json(`${store.server.url}/api/provider`, 5000);
+    setProviders(store, res.data ?? []);
+  } catch {
+    /* provider 列表拿不到就沿用上一份 */
+  }
+}
+
 async function pollStrata() {
   try {
     const [metrics, status, slots, health] = await Promise.all([
@@ -247,6 +257,7 @@ httpServer.listen(PORT, HOST, () => {
     await pollOpencode();
   }, 3000);
   loop(pollStrata, 2000);
+  loop(pollProviders, 30000);
   loop(() => {
     broadcast({ type: "snap", data: snapshot(store) });
   }, 1200);

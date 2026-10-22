@@ -111,6 +111,20 @@ const TE = {
   "总请求": "total requests",
   "复用": "reuse",
   "只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队": "Only 1 inference slot: parallel tool calls and subagents queue serially on the GPU",
+  // opencode API 面板（没连 Strata / 走远端 provider 时）
+  "opencode API": "opencode API",
+  "接口": "Provider",
+  "地址": "Endpoint",
+  "上次请求": "Last request",
+  "上次用量": "Last usage",
+  "上次费用": "Last cost",
+  "累计费用": "Total cost",
+  "费用": "Cost",
+  "重试": "Retries",
+  "当前请求": "Current request",
+  "opencode 直接调远端 API：没有本地 GPU/排队指标": "opencode calls the provider API directly — no local GPU/queue metrics",
+  "未连接 Strata": "Strata offline",
+  "当前会话走 opencode API": "this session uses the opencode API",
   // 等待面板
   "权限待批": "Permission pending",
   "等你回答": "Waiting for your answer",
@@ -729,22 +743,42 @@ function renderHeader() {
 
   const t = cur()?.tokens ?? {};
   const live = snap.strata.live ?? {};
-  $("chips").innerHTML = [
-    chip("模型", `${cur()?.model?.id ?? snap.strata.health?.model ?? "?"}/${cur()?.model?.providerID ?? "?"}`),
-    chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
-    chip("生成", fmtTok(t.output ?? 0)),
-    chip("缓存读", fmtTok(t.cache?.read ?? 0)),
-    chip("GPU", live.state ?? tr("离线"), live.state ? "text-gpu" : "text-error"),
-    chip("tok/s", live.tok_s ? Math.round(live.tok_s) : "—", "text-gpu"),
-    chip("排队", live.queued ?? 0, live.queued > 0 ? "text-blocked" : "text-ink-dim"),
-  ].join("");
+  const backend = cur()?.backend ?? (snap.strata.alive ? "strata" : "api");
+  const api = cur()?.api ?? null;
+  // 两种模式都保持 7 个 chip，避免切换后布局跳动
+  const chips =
+    backend === "api"
+      ? [
+          chip("模型", `${cur()?.model?.id ?? "?"}/${cur()?.model?.providerID ?? "?"}`),
+          chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
+          chip("生成", fmtTok(t.output ?? 0)),
+          chip("缓存读", fmtTok(t.cache?.read ?? 0)),
+          chip("接口", api?.provider?.name ?? cur()?.model?.providerID ?? "—", "text-gpu"),
+          chip("上次请求", api?.last ? fmtDur(api.last.durationMs) : "—"),
+          chip("费用", api?.totals?.cost ? `$${Number(api.totals.cost).toFixed(4)}` : "—"),
+        ]
+      : [
+          chip("模型", `${cur()?.model?.id ?? snap.strata.health?.model ?? "?"}/${cur()?.model?.providerID ?? "?"}`),
+          chip("上下文", fmtTok((t.input ?? 0) + (t.cache?.read ?? 0))),
+          chip("生成", fmtTok(t.output ?? 0)),
+          chip("缓存读", fmtTok(t.cache?.read ?? 0)),
+          chip("GPU", live.state ?? tr("离线"), live.state ? "text-gpu" : "text-error"),
+          chip("tok/s", live.tok_s ? Math.round(live.tok_s) : "—", "text-gpu"),
+          chip("排队", live.queued ?? 0, live.queued > 0 ? "text-blocked" : "text-ink-dim"),
+        ];
+  $("chips").innerHTML = chips.join("");
 }
 
 function renderBanner() {
   const b = $("banner");
   const msgs = [];
+  const backend = cur()?.backend ?? (snap.strata.alive ? "strata" : "api");
   if (snap.server.reconnecting || !snap.server.reachable) msgs.push(`${tr("opencode 服务未连通")}${sep()}${snap.server.lastError ?? tr("正在重新发现端口")}`);
-  if (!snap.strata.alive) msgs.push(`${tr("Strata 指标不可用")}${sep()}${snap.strata.lastError ?? tr("未启动")}`);
+  if (!snap.strata.alive) {
+    // 走 opencode API 时 Strata 没连上是正常的，只提示一句
+    if (backend === "api") msgs.push(`${tr("未连接 Strata")}${sep()}${tr("当前会话走 opencode API")}`);
+    else msgs.push(`${tr("Strata 指标不可用")}${sep()}${snap.strata.lastError ?? tr("未启动")}`);
+  }
   b.classList.toggle("hidden", msgs.length === 0);
   b.textContent = msgs.join(" · ");
 }
@@ -1200,6 +1234,15 @@ function renderTimeline() {
 }
 
 function renderGpu() {
+  const s = cur();
+  const backend = s?.backend ?? (snap.strata.alive ? "strata" : "api");
+  const titleEl = $("gpu-title");
+  if (backend === "api") {
+    if (titleEl) titleEl.textContent = tr("opencode API");
+    renderApiPanel(s);
+    return;
+  }
+  if (titleEl) titleEl.textContent = tr("Strata GPU");
   const g = snap.strata;
   if (!g.alive) {
     $("gpu").innerHTML = `<div class="text-xs text-error font-mono">${tr("Strata 未连通")}${sep()}${g.lastError ?? tr("未启动")}</div>`;
@@ -1254,6 +1297,40 @@ function renderGpu() {
     ${mini("缓存命中趋势", sm.map((x) => (x.hit != null ? Math.round(x.hit * 100) : 0)), 100)}
     <div class="text-[11px] text-ink-dim font-mono">${tr("总请求")} ${tot.requests ?? "?"} · prompt ${fmtTok(tot.prompt_tokens)} · ${tr("复用")} ${fmtTok(tot.reused)} · ${tr("输出")} ${fmtTok(tot.output_tokens)}</div>
     <div class="text-[10px] text-ink-dim">${tr("只有 1 个推理 slot：并行工具调用与 subagent 会在 GPU 上串行排队")}</div>
+  `;
+}
+
+// —— 没连 Strata（或会话走远端 provider）时：显示 opencode API 视角的信息 ——
+function renderApiPanel(s) {
+  const el = $("gpu");
+  const api = s?.api;
+  if (!s || !api) {
+    el.innerHTML = `<div class="text-xs text-ink-dim font-mono">${tr("没有会话")}</div>`;
+    return;
+  }
+  const p = api.provider;
+  const last = api.last;
+  const lt = last?.tokens ?? null;
+  const tot = api.totals?.tokens ?? null;
+  const money = (n) => (!n ? "—" : `$${Number(n).toFixed(4)}`);
+  const row = (label, value, title) =>
+    `<span class="text-ink-dim">${label}</span><span class="truncate" title="${title ?? value}">${value}</span>`;
+  const endpoint = p?.baseURL ? p.baseURL.replace(/^https?:\/\//, "") : "—";
+  const rows = [
+    row(tr("接口"), p ? p.name : (s.model?.providerID ?? "—"), p ? `${p.name} (${p.id})` : null),
+    row(tr("地址"), endpoint, p?.baseURL ?? null),
+    row(tr("模型"), s.model?.id ?? "—"),
+    row(tr("上次请求"), last ? `#${last.index} · ${fmtDur(last.durationMs)}${last.finish ? ` · ${last.finish}` : ""}` : "—"),
+    row(tr("上次用量"), lt ? `${tr("输入")} ${fmtTok(lt.input)} · ${tr("输出")} ${fmtTok(lt.output)} · ${tr("缓存读")} ${fmtTok(lt.cache?.read ?? 0)}` : "—"),
+    row(tr("上次费用"), money(last ? last.cost : null)),
+    row(tr("累计费用"), `${money(api.totals?.cost ?? null)}${tot?.output ? ` · ${tr("输出")} ${fmtTok(tot.output)}` : ""}`),
+    row(tr("重试"), api.retry ? `${api.retry.attempt}${api.retry.error ? ` · ${api.retry.error}` : ""}` : "0"),
+  ];
+  const running = api.open ? row(tr("当前请求"), `#${api.open.index} · ${fmtDur(api.open.elapsedMs)}`) : "";
+  el.innerHTML = `
+    <div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] font-mono">${rows.join("")}</div>
+    ${running ? `<div class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] font-mono mt-1 text-running">${running}</div>` : ""}
+    <div class="text-[10px] text-ink-dim mt-1">${tr("opencode 直接调远端 API：没有本地 GPU/排队指标")}</div>
   `;
 }
 

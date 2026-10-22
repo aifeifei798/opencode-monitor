@@ -53,6 +53,7 @@ npm run build               # styles/input.css → public/tailwind.css
 - **opencode 服务**：密码读自 `~/.config/opencode/service.json`；端口每 3 秒通过 `opencode service status` 重新发现（服务换新端口会自动重连）。
 - **事件流**：`GET /api/event`（SSE）。已映射：`session.execution.*`、`session.step.*`、`session.reasoning.*`、`session.tool.input.*` / `called` / `progress` / `success`、`session.compaction.*`、`session.usage.updated`、`session.created/deleted`（子 agent 树）。
 - **兜底轮询**（3 秒）：`/api/session`、`/api/session/active`、`/api/permission/request`、`/api/form`、`/api/shell`。
+- **provider 列表**（30 秒）：`/api/provider`——判断每个会话实际在用什么后端。`baseURL` 指向 `127.0.0.1` 的是本机（Strata），其余都是走 opencode 自己的 API 的远端 provider。
 - **Strata GPU**（2 秒）：`http://127.0.0.1:8080` 的 `/metrics`、`/status`、`/slots`、`/api/health`。
 
 ## 页面上有什么
@@ -62,6 +63,7 @@ npm run build               # styles/input.css → public/tailwind.css
 - **会话树**：主会话与子 agent 分支按 `parentID` 缩进，按状态着色；每行显示该会话当前诊断状态（等你批准 / GPU 排队 / 生成中 / 空闲…）。
 - **时间轴**：每个 Step 的耗时条，拆成 prefill / decode 两段。
 - **Strata 面板**：GPU 利用率、显存、温度、功耗、tok/s、排队数、KV 命中率、draft 接受率、上下文占用、利用率折线，外加监控自身采样攒出的 tok/s / 排队 / 缓存命中趋势小图。
+- **opencode API 面板**：没连 Strata——或者选中的会话走的是远端 provider——时，同一个面板换成 opencode API 视角：provider 名称、接口地址、模型、上次请求（步号、耗时、结束原因）、上次用量（输入 / 输出 / 缓存读）、上次与累计费用、重试次数，以及当前正在跑的请求。头部 chip 也跟着换（接口 / 上次请求 / 费用取代 GPU / tok/s / 排队），诊断也不会再把「GPU 排队」算到这个压根没用 GPU 的会话头上。
 - **时间去向**：堆叠条把总时长拆成生成 / 工具执行 / 等你（已解决的批准与提问） / 其余（排队等）——近似值，只含保留的 step 缓冲。
 - **诊断历史带**：色块带记录每次诊断状态迁移（生成中 → 等你批准 → GPU 排队…），每段按持续时长定宽。
 - **等待 / 事件流**：待批准的权限、未回答的问题、运行中的 shell；可过滤的事件日志。
